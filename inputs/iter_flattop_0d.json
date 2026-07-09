@@ -1,0 +1,45 @@
+{
+  "machine": {
+    "R0": 6.2,
+    "a": 2.0,
+    "kappa": 1.8,
+    "delta": 0.33,
+    "Bt": 5.3,
+    "Ip_MA": 15.0,
+    "Zeff": 1.8,
+    "plasma_species": "DT",
+    "impurity_Z": 74.0
+  },
+  "actuator": {
+    "P_aux_MW": 50.0,
+    "greenwald_fraction_target": 0.85,
+    "greenwald_edge_density_fraction": 0.15
+  },
+  "simulation": {
+    "simulation_model": "0d_fast",
+    "nr": 32,
+    "ntheta": 32,
+    "dt": 0.5,
+    "end_time_s": 50,
+    "initial_beta_N_target": 1.8,
+    "density_evolution_model": "greenwald_rescale_tanh",
+    "zero_d_H_factor": 0.9,
+    "zero_d_dt_fraction_tauE": 0.1,
+    "pedestal_model": "eped1_nn_jax",
+    "equilibrium_model": "geqdsk_prescribed",
+    "geqdsk_path": "ITERbaseline.eqdsk",
+    "current_evolution_model": "saturated_conductivity"
+  },
+  "optimization": {
+    "n_iter": 2,
+    "gradient_mode": "autodiff",
+    "learning_rate": 0.5,
+    "objective": ["Q", "Pfus"],
+    "objective_weights": [1.0, 0.01],
+    "controls": ["Ip_MA", "P_aux_MW"],
+    "constraints": [
+        {"metric": "q95", "kind": "lower", "value": 3.0, "weight": 10.0},
+        {"metric": "beta_N", "kind": "upper", "value": 4.0, "weight": 10.0}
+    ]
+  }
+}

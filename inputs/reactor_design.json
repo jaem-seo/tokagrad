@@ -1,0 +1,60 @@
+{
+  "description": "Fixed-actuator ITER-like time evolution using the bundled ITERbaseline.eqdsk.",
+  "machine": {
+    "R0": 6.2,
+    "a": 2.0,
+    "Bt": 5.3,
+    "Ip_MA": 15.0,
+    "kappa": 1.8,
+    "delta": 0.33,
+    "Zeff": 1.8,
+    "plasma_species": "DT",
+    "impurity_Z": 74.0
+  },
+  "actuator": {
+    "P_aux_MW": 50.0,
+    "greenwald_fraction_target": 1.0,
+    "greenwald_edge_density_fraction": 0.15
+  },
+  "simulation": {
+    "nr": 32,
+    "ntheta": 32,
+    "dt": 0.001,
+    "end_time_s": 5.0,
+    "equilibrium_skip_steps": 10000,
+    "source_skip_steps": 10,
+    "transport_skip_steps": 10,
+    "pedestal_skip_steps": 10,
+    "equilibrium_model": "reduced_fixed_boundary",
+    "current_evolution_model": "saturated_conductivity",
+    "density_evolution_model": "greenwald_feedback",
+    "transport_model": "tglfnn_jax",
+    "neoclassical_transport_model": "neonn_jax",
+    "pedestal_model": "eped1_nn_jax",
+    "pedestal_enforcement": "tanh_underlay",
+    "pedestal_lh_threshold_model": "delabie",
+    "initial_beta_N_target": 1.8,
+    "initial_profile_model": "parabolic",
+    "initial_current_profile_model": "total_current_shape"
+  },
+  "optimization": {
+    "n_iter": 10,
+    "gradient_mode": "autodiff",
+    "ad_smooth_mode": false,
+    "learning_rate": 0.5,
+    "objective": ["Q", "P_fus"],
+    "objective_weights": [1.0, 0.01],
+    "controls": ["R0", "a", "Bt", "Ip_MA", "P_aux_MW"],
+    "bounds": {
+      "R0": [5.5, 7.0],
+      "a": [1.5, 2.4],
+      "Bt": [4.5, 6.5],
+      "Ip_MA": [2.0, 17.0],
+      "P_aux_MW": [10.0, 80.0]
+    },
+    "constraints": [
+        {"metric": "q95", "kind": "lower", "value": 3.0, "weight": 100.0},
+        {"metric": "beta_N", "kind": "upper", "value": 3.0, "weight": 100.0}
+    ]
+  }
+}

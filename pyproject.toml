@@ -1,0 +1,26 @@
+[project]
+name = "TokaGrad"
+version = "0.1.0"
+description = "Full-discharge end-to-end differentiable 1.5D tokamak simulator"
+requires-python = ">=3.10"
+dependencies = [
+  "jax",
+  "jaxlib",
+  "numpy",
+  "matplotlib",
+  "streamlit",
+  "pandas",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[project.optional-dependencies]
+qlknn = [
+  "fusion_surrogates",
+]
+
+optim = [
+  "optax",
+]
