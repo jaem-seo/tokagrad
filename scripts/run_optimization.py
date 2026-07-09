@@ -50,7 +50,7 @@ def _load_raw(path: Path) -> dict[str, Any]:
 
 def _default_input_file() -> Path | None:
     root = Path(__file__).resolve().parents[1]
-    for name in ("iter_flattop_1d.json", "iter_waveform_1d.json"):
+    for name in ("iter_flattop_tglfnn.json", "iter_waveform_transition.json"):
         p = root / "inputs" / name
         if p.exists():
             return p

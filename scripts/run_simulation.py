@@ -6,10 +6,8 @@ The input JSON decides what is run:
     otherwise a fixed-actuator steady/pseudo-time simulation is run.
 
 Examples:
-  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/steady_iter_default.json
-  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/waveform_iter_like.json
-  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/steady_0d_fast.json
-  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/waveform_0d_fast.json
+  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/iter_flattop_tglfnn.json
+  PYTHONPATH=src python scripts/run_simulation.py --input-file inputs/iter_waveform_transition.json
 """
 from __future__ import annotations
 
@@ -956,7 +954,7 @@ def plot_waveform_single_figure_time_slider(rho, state0, final_state, machine, a
 
 def _default_input_file() -> Path | None:
     root = Path(__file__).resolve().parents[1]
-    for name in ("iter_flattop_1d.json", "iter_waveform_1d.json"):
+    for name in ("iter_flattop_tglfnn.json", "iter_waveform_transition.json"):
         p = root / "inputs" / name
         if p.exists():
             return p

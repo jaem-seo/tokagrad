@@ -64,7 +64,7 @@ CONTROL_UNITS = {
 
 
 def _default_input_file() -> Path:
-    return ROOT / "inputs" / "iter_flattop_1d.json"
+    return ROOT / "inputs" / "iter_flattop_tglfnn.json"
 
 
 def _load_raw(path: Path) -> dict[str, Any]:
