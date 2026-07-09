@@ -21,7 +21,7 @@ full Grad-Shafranov or gyrokinetic solver.
 - Semi-implicit finite-volume transport on cylindrical or flux geometry.
 - Reduced fixed-boundary Miller geometry or prescribed G-EQDSK surfaces.
 - JAX-native TGLF-NN, NEO-NN, and EPED1-NN inference from bundled BrainFUSE
-  model files.
+  model files. QLKNN from fusion_surrogates also supported.
 - Auxiliary, Ohmic, and alpha heating; electron-ion exchange; bremsstrahlung,
   line-radiation, and synchrotron losses.
 - Sauter bootstrap current, current drive, neoclassical resistivity, and
@@ -55,11 +55,11 @@ the dimensionality and whether the run uses fixed actuators or waveforms.
 ```bash
 # Fixed-actuator 1.5D simulation
 python scripts/run_simulation.py \
-  --input-file inputs/iter_flattop_1d.json
+  --input-file inputs/iter_flattop_tglfnn.json
 
 # Time-dependent 1.5D simulation
 python scripts/run_simulation.py \
-  --input-file inputs/iter_waveform_1d.json
+  --input-file inputs/iter_waveform_transition.json
 
 # Fast 0.5D simulation
 python scripts/run_simulation.py \
@@ -70,34 +70,33 @@ Useful command-line overrides include:
 
 ```bash
 python scripts/run_simulation.py \
-  --input-file inputs/iter_flattop_1d.json \
+  --input-file inputs/iter_flattop_tglfnn.json \
   --nr 32 --ntheta 32 --dt 1e-3 --end-time 10 \
+  --save-results \
+  --save-result-times "0.0, 5.0, 10.0" \
   --no-show
 ```
 
 Use `--save-results`, `--save-result-times`, and `--save-result-file` to save
 selected physical-time slices to a compressed NumPy file.
-Add `--plot-psi` to include the poloidal-flux profile in the interactive plot.
+Add `--plot-psi` or `--plot-diffusivity` to include 
+the poloidal-flux or diffusivity profile in the interactive plot.
 
 ## Optimization
 
 The unified optimization entry point is `scripts/run_optimization.py`.
 
 ```bash
-# Uses inputs/iter_flattop_1d.json by default
+# Uses inputs/iter_flattop_tglfnn.json by default
 python scripts/run_optimization.py
 
 # Explicit scalar-control case
 python scripts/run_optimization.py \
-  --input-file inputs/optim_1d.json
-
-# Fast 0.5D scalar optimization
-python scripts/run_optimization.py \
-  --input-file inputs/optim_0d.json
+  --input-file inputs/iter_flattop_tglfnn.json
 
 # Waveform-control optimization
 python scripts/run_optimization.py \
-  --input-file inputs/optim_0d_waveform.json
+  --input-file inputs/iter_waveform_transition.json
 ```
 
 Scalar controls can include `Ip_MA`, `Bt`, `P_aux_MW`,
