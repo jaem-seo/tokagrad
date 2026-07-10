@@ -91,6 +91,15 @@ Use `--save-results`, `--save-result-times`, and `--save-result-file` to save
 selected physical-time slices to a compressed NumPy file.
 Add `--plot-psi` or `--plot-diffusivity` to include 
 the poloidal-flux or diffusivity profile in the interactive plot.
+On remote X11 servers where Matplotlib sliders fail because XInput 2 is not
+available, use `--simple-final-plot` to draw only a static final-state summary
+without slider/button widgets:
+
+```bash
+python scripts/run_simulation.py \
+  --input-file inputs/iter_flattop_tglfnn.json \
+  --simple-final-plot
+```
 
 ## Optimization
 

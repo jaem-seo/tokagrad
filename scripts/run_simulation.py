@@ -421,6 +421,47 @@ def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, f
     return fig
 
 
+def plot_final_state_static(machine, actuator, sim, waveform, rho, state0, final_state, hist, *, show=True, save_path=""):
+    """Plot only the final state without Matplotlib widgets.
+
+    This intentionally avoids importing ``matplotlib.widgets``.  It is useful
+    on remote/X11 servers where the simulation runs correctly but GUI input
+    extensions such as XInput 2 are unavailable and interactive sliders fail.
+    """
+    import matplotlib.pyplot as plt
+
+    times = _simulation_times(sim, hist)
+    t_final = float(times[-1]) if len(times) else float(sim.dt) * int(sim.n_steps)
+    mt, at = _active_configs(machine, actuator, sim, waveform, t_final)
+    diag = zero_d_diagnostics(final_state, mt, at, sim) if zero_d_enabled(sim) else compute_diagnostics(final_state, mt, at, sim)
+
+    show_diff = bool(getattr(sim, "plot_diffusivity", False))
+    show_psi = bool(getattr(sim, "plot_psi", False))
+    ncols = 5 + int(show_diff) + int(show_psi)
+    fig, axs = plt.subplots(1, ncols, figsize=(21 + 4 * (ncols - 5), 5))
+    fig.subplots_adjust(bottom=0.12, wspace=0.32, hspace=0.36, left=0.035, right=0.985)
+
+    _plot_state_summary(axs, rho, diag, final_state, mt, at, sim, t_final, waveform=waveform, hist=hist)
+    fig.suptitle(
+        "TokaGrad final-state summary  "
+        f"t={t_final:.4g} s  |  "
+        f"Ip={float(mt.Ip) / 1e6:.3g} MA, Bt={float(mt.Bt):.3g} T, P_aux={float(at.P_aux_MW):.3g} MW  |  "
+        f"Q={float(diag.get('Q', 0.0)):.3g}, "
+        f"P_fus={float(diag.get('P_fus_MW', 0.0)):.3g} MW, "
+        f"beta_N={float(diag.get('beta_N', 0.0)):.3g}, "
+        f"f_G={float(diag.get('greenwald_fraction', 0.0)):.3g}",
+        fontsize=12,
+    )
+
+    if save_path:
+        fig.savefig(save_path, dpi=160, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
 def _axis_aug_np(rho, y, edge_value=None):
     rr, yy = boundary_augmented_profile(rho, y, edge_value=edge_value)
     return _np(rr), _np(yy)
@@ -1014,6 +1055,7 @@ def parse_args(argv=None):
     p.add_argument("--save-figure", default="", help="Optional output PNG/PDF path.")
     p.add_argument("--no-show", action="store_true", help="Do not call plt.show().")
     p.add_argument("--no-plot", action="store_true", help="Run simulation and diagnostics only; skip plotting.")
+    p.add_argument("--simple-final-plot", action="store_true", help="Plot only the final state without Matplotlib sliders/buttons. Useful on X11 servers without XInput 2.")
     p.add_argument("--plot-diffusivity", action="store_true", help="Include the optional chi_e/chi_i/Dn diffusivity debug panel in plots.")
     p.add_argument("--plot-psi", action="store_true", help="Include the poloidal-flux psi profile panel in plots.")
     p.add_argument("--quiet-timing", action="store_true", help="Suppress wall-time breakdown.")
@@ -1173,14 +1215,15 @@ def main(argv=None):
     if not args.no_plot:
         rho, _, dr = make_grid_from_config(sim.nr, machine.a, sim)
         show = (not args.no_show) and _backend_can_show()
-        '''plot_simulation_time_slider(
-            machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
-            show=show, save_path=args.save_figure
-        )'''
-        if has_waveform:
+        if args.simple_final_plot:
+            plot_final_state_static(
+                machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
+                show=show, save_path=args.save_figure
+            )
+        elif has_waveform:
             plot_waveform_single_figure_time_slider(
                 rho, state0, final_state, machine, actuator, sim, waveform, hist,
-                show=not args.no_show,
+                show=show,
                 save_path=args.save_figure,
             )
         else:
