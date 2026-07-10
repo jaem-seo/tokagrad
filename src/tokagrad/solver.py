@@ -775,6 +775,27 @@ def apply_greenwald_matching_feedback_implicit_response(
     correction = response * (avg_delta / (response_avg + 1.0e-30))
     return ne_free + correction
 
+
+def greenwald_feedback_source_rate(rho, ne_ref, dV_drho, machine, actuator, sim):
+    """Continuous-time Greenwald feedback source rate for implicit density solve."""
+    nbar = volume_average_profile(ne_ref, dV_drho)
+    n_target = target_nbar20(machine, actuator, sim)
+    tau = jnp.maximum(jnp.asarray(getattr(sim, "density_feedback_tau", 1.0e-3), dtype=ne_ref.dtype), 1.0e-12)
+    dt = jnp.asarray(sim.dt, dtype=ne_ref.dtype)
+    relax = 1.0 - jnp.exp(-dt / tau)
+    avg_delta = relax * (n_target - nbar)
+    avg_delta = maybe_limit_delta(avg_delta, getattr(sim, "density_source_max_delta", 0.25), sim)
+
+    shape = jnp.exp(-0.5 * ((rho - 1.0) / (sim.density_boundary_source_width + 1.0e-8)) ** 2)
+    shape = shape / (volume_average_profile(shape, dV_drho) + 1.0e-12)
+    return shape * avg_delta / (dt + 1.0e-12)
+
+
+def density_model_uses_implicit_source_feedback(sim):
+    model = getattr(sim, "density_evolution_model", "diffusive")
+    method = str(getattr(sim, "density_feedback_method", "implicit_source")).lower()
+    return model == "greenwald_feedback" and method in ("implicit_source", "source", "in_solve")
+
 def greenwald_boundary_particle_source(rho, ne20, dV_drho, machine, actuator, sim):
     """Edge-localized source rate to maintain target Greenwald fraction."""
     nbar = volume_average_profile(ne20, dV_drho)
@@ -830,7 +851,9 @@ def apply_density_model_after_update(ne_candidate, state, rho, Dn, ne_source, eq
         return maybe_clip(out, 1e-4, 5.0, sim)
 
     if model == "greenwald_feedback":
-        method = str(getattr(sim, "density_feedback_method", "implicit_response")).lower()
+        method = str(getattr(sim, "density_feedback_method", "implicit_source")).lower()
+        if method in ("implicit_source", "source", "in_solve"):
+            return maybe_clip(ne_candidate, 1.0e-4, 5.0, sim)
         if method in ("post_correction", "legacy", "direct"):
             return apply_greenwald_matching_feedback(
                 rho, ne_candidate, eq.dV_drho, machine, actuator, sim
@@ -1339,6 +1362,10 @@ def _implicit_profile_step_with_reference(
     dV = eq.dV_drho
     phi_rate = effective_phi_dot_over_phi(reference_state, eq, sim)
     dV_old = previous_dV_drho(state, eq)
+    if density_model_uses_implicit_source_feedback(sim):
+        ne_source = ne_source + greenwald_feedback_source_rate(
+            rho, reference_state.ne20, dV, machine, actuator, sim
+        )
 
     # Advance density first because the heat equation evolves
     # V'^(5/3)*n*T, not T alone.  The updated density therefore belongs in the
@@ -1530,6 +1557,10 @@ def semi_implicit_step_cached(state: PlasmaState, cache: StepCache, i, machine, 
     dV = eq.dV_drho
     phi_rate = effective_phi_dot_over_phi(state, eq, sim)
     dV_old = previous_dV_drho(state, eq)
+    if density_model_uses_implicit_source_feedback(sim):
+        ne_source = ne_source + greenwald_feedback_source_rate(
+            rho, state.ne20, dV, machine, actuator, sim
+        )
 
     # Density supplies the new-time transient coefficient C=V'^(5/3)*n in
     # the heat solve, so update it before Te and Ti.
