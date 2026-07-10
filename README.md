@@ -119,6 +119,9 @@ Unless `--no-post-simulation` is supplied, optimization writes an
 ```bash
 streamlit run app_streamlit.py
 ```
+<p align="center">
+  <img src="https://github.com/jaem-seo/tokagrad/blob/main/images/fig2.png">
+</p>
 
 The application provides:
 
