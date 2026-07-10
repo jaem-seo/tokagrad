@@ -197,6 +197,10 @@ class SimulationConfig:
     # selected pedestal model is "none" or cannot provide a width.
     density_feedback_tau: float = 1.0e-3
     # Global particle feedback time [s] for greenwald_feedback mode.
+    greenwald_feedback_average_basis: str = "volume"
+    # Density average used by greenwald_feedback. "volume" uses the current
+    # volume-weighted average; "line" uses a center-chord radial line average
+    # int_0^1 n(rho) d rho.  The target density is still f_G*n_G.
     density_feedback_method: str = "implicit_response"
     # Greenwald feedback implementation. "implicit_source" injects the feedback
     # as a source in the density solve itself, avoiding both post-step edge
