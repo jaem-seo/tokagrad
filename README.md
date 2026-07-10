@@ -97,6 +97,10 @@ python scripts/run_optimization.py \
 # Waveform-control optimization
 python scripts/run_optimization.py \
   --input-file inputs/iter_waveform_transition.json
+
+# Reactor design optimization
+python scripts/run_optimization.py \
+  --input-file inputs/reactor_design.json
 ```
 
 Scalar controls can include `Ip_MA`, `Bt`, `P_aux_MW`,
