@@ -197,6 +197,11 @@ class SimulationConfig:
     # selected pedestal model is "none" or cannot provide a width.
     density_feedback_tau: float = 1.0e-3
     # Global particle feedback time [s] for greenwald_feedback mode.
+    density_feedback_method: str = "implicit_response"
+    # Greenwald feedback implementation. "implicit_response" applies the
+    # edge-localized particle source through the same implicit diffusion
+    # response used by the density solve, reducing dt-dependent post-step edge
+    # humps. "post_correction" restores the legacy direct profile correction.
     density_boundary_source_width: float = 0.1
     # Width in rho of edge particle source for greenwald_feedback mode.
     density_source_max_delta: float = 0.25

@@ -711,13 +711,69 @@ def apply_reflective_particle_conservation(rho, ne20, ne_old, dV_drho, sim):
     return ne20 + (nbar_old - nbar_new) * shape
 
 def apply_greenwald_matching_feedback(rho, ne20, dV_drho, machine, actuator, sim):
-    """Apply edge density source to match target Greenwald fraction"""
+    """Legacy post-step edge correction to match target Greenwald fraction."""
     nbar = volume_average_profile(ne20, dV_drho)
     n_target = target_nbar20(machine, actuator, sim)
     delta = n_target - nbar
     shape = jnp.exp(-0.5 * ((rho - 1.0) / (sim.density_boundary_source_width + 1e-8)) ** 2)
     shape = shape / (volume_average_profile(shape, dV_drho) + 1e-12)
     return ne20 + shape * delta
+
+
+def apply_greenwald_matching_feedback_implicit_response(
+    rho,
+    ne_free,
+    ne_old,
+    Dn,
+    eq,
+    machine,
+    actuator,
+    sim,
+):
+    """Apply Greenwald feedback as a density-solver source response.
+
+    The legacy ``greenwald_feedback`` implementation added a normalized edge
+    Gaussian directly after the diffusion solve.  For large dt that produces a
+    split-operator pulse: diffusion removes density over the whole step, then a
+    large localized correction is deposited at the very end of the step and is
+    not diffused until the next step.  This helper computes the response of the
+    same implicit density operator to a unit edge source and adds the correction
+    in that diffused response shape instead.
+
+    The volume-average error is relaxed by ``1-exp(-dt/tau)`` in physical time,
+    so changing dt changes the time discretization error but not the intended
+    feedback law.
+    """
+    dV = eq.dV_drho
+    nbar = volume_average_profile(ne_free, dV)
+    n_target = target_nbar20(machine, actuator, sim)
+    tau = jnp.maximum(jnp.asarray(getattr(sim, "density_feedback_tau", 1.0e-3), dtype=ne_free.dtype), 1.0e-12)
+    dt = jnp.asarray(sim.dt, dtype=ne_free.dtype)
+    relax = 1.0 - jnp.exp(-dt / tau)
+    avg_delta = relax * (n_target - nbar)
+    avg_delta = maybe_limit_delta(avg_delta, getattr(sim, "density_source_max_delta", 0.25), sim)
+
+    shape = jnp.exp(-0.5 * ((rho - 1.0) / (sim.density_boundary_source_width + 1.0e-8)) ** 2)
+    shape = shape / (volume_average_profile(shape, dV) + 1.0e-12)
+
+    zero = jnp.zeros_like(ne_old)
+    response = semi_implicit_density_update(
+        zero,
+        Dn,
+        shape,
+        rho,
+        machine,
+        sim,
+        jnp.asarray(0.0, dtype=ne_free.dtype),
+        sim.dt,
+        eq,
+        jnp.asarray(0.0, dtype=ne_free.dtype),
+        V_e=jnp.zeros_like(ne_old),
+        dV_drho_old=dV,
+    )
+    response_avg = volume_average_profile(response, dV)
+    correction = response * (avg_delta / (response_avg + 1.0e-30))
+    return ne_free + correction
 
 def greenwald_boundary_particle_source(rho, ne20, dV_drho, machine, actuator, sim):
     """Edge-localized source rate to maintain target Greenwald fraction."""
@@ -774,8 +830,19 @@ def apply_density_model_after_update(ne_candidate, state, rho, Dn, ne_source, eq
         return maybe_clip(out, 1e-4, 5.0, sim)
 
     if model == "greenwald_feedback":
-        return apply_greenwald_matching_feedback(
-            rho, ne_candidate, eq.dV_drho, machine, actuator, sim
+        method = str(getattr(sim, "density_feedback_method", "implicit_response")).lower()
+        if method in ("post_correction", "legacy", "direct"):
+            return apply_greenwald_matching_feedback(
+                rho, ne_candidate, eq.dV_drho, machine, actuator, sim
+            )
+        if method in ("implicit_response", "implicit", "response"):
+            out = apply_greenwald_matching_feedback_implicit_response(
+                rho, ne_candidate, state.ne20, Dn, eq, machine, actuator, sim
+            )
+            return maybe_clip(out, 1.0e-4, 5.0, sim)
+        raise ValueError(
+            f"Unknown density_feedback_method={method!r}. "
+            'Use "implicit_response" or "post_correction".'
         )
 
     raise ValueError(
