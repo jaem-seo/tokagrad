@@ -38,14 +38,8 @@ Python 3.10 or newer is required.
 python -m pip install -e .
 ```
 
-Dependencies:
-
-```bash
-python -m pip install -e '.[optim]'   # Optax
-python -m pip install -e '.[qlknn]'   # fusion_surrogates
-```
-
-The optimizer contains an internal Adam fallback when Optax is unavailable.
+This installs the core simulator, Streamlit UI, Optax optimization backend, and
+the `fusion_surrogates` QLKNN adapter dependencies.
 
 JAX-native TGLF-NN, NEO-NN, and EPED1-NN modes expect the GA `neural`
 repository to be available under `external_models/neural`. If it is not already
@@ -58,6 +52,10 @@ git clone https://github.com/gafusion/neural.git external_models/neural
 
 The default input files use this path through settings such as
 `tglfnn_model_dir`, `neonn_model_dir`, and `eped1nn_model_dir`.
+Standard `pyproject.toml` dependencies cannot clone a non-package model-asset
+repository into a project-local path during `pip install`; keep this clone step
+separate, or vendor the repository as a Git submodule if you want it tracked
+with the source tree.
 
 ## Running simulations
 
@@ -77,10 +75,6 @@ python scripts/run_simulation.py \
 python scripts/run_simulation.py \
   --input-file inputs/iter_flattop_0d.json
 ```
-<p align="center">
-  <img src="https://github.com/jaem-seo/tokagrad/blob/main/images/_run_simulation.png">
-</p>
-
 
 Useful command-line overrides include:
 

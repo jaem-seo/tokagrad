@@ -10,17 +10,9 @@ dependencies = [
   "matplotlib",
   "streamlit",
   "pandas",
+  "optax",
+  "fusion_surrogates",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-
-[project.optional-dependencies]
-qlknn = [
-  "fusion_surrogates",
-]
-
-optim = [
-  "optax",
-]
