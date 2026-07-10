@@ -65,6 +65,10 @@ python scripts/run_simulation.py \
 python scripts/run_simulation.py \
   --input-file inputs/iter_flattop_0d.json
 ```
+<p align="center">
+  <img src="https://github.com/jaem-seo/tokagrad/blob/main/images/_run_simulation.png">
+</p>
+
 
 Useful command-line overrides include:
 
