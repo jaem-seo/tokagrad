@@ -91,17 +91,17 @@ def _resolve_beta_N_proxy(state, machine, actuator, sim, beta_N_proxy=None, eq=N
 def _grad(y, rho, a):
     return radial_gradient(y, rho, a)
 
-def alpha_critical_shape_proxy(machine, q_top, s_top, sim):
+def alpha_critical_shape_proxy(machine, q_top, s_top, k_top, d_top, sim):
     """Reduced shape-based empirical alpha_critical proxy.
 
     Reference: [T. Onjun et al., Phys. Plasmas 9, 5018 (2002)].
     """
-    k = machine.kappa
-    d = machine.delta
-    s = _maybe_lower(s_top, 1.0, sim, 1e-3)
+    k = k_top
+    d = d_top
+    s = _maybe_lower(s_top, 0.0, sim, 1e-3)
     q = _maybe_lower(q_top, 0.5, sim, 1e-3)
     alpha = sim.pedestal_alpha_scale * (
-        0.4 * s * k**2
+        0.4 * s * (1.0 + k**2 * (1.0 + 5.0 * d**2))
     )
     return _maybe_bound(alpha, sim.pedestal_alpha_min, sim.pedestal_alpha_max, sim, 1e-2)
 
@@ -136,13 +136,18 @@ def pedestal_pressure_height_from_alpha(rho, machine, q, sim, beta_p_guess=0.05)
     In smooth mode, quantities at the pedestal top are obtained by smooth
     interpolation rather than argmin indexing.
     """
+    kappa_r = 1.0 + (machine.kappa - 1.0) * rho ** sim.elongation_profile_power
+    delta_r = machine.delta * rho ** sim.triangularity_profile_power
+    k95 = _interp_at_rho(rho, kappa_r, 0.95)
+    d95 = _interp_at_rho(rho, delta_r, 0.95)
+
     width = kbm_width(beta_p_guess, sim)
     rho_top = 1.0 - width
 
     s = _magnetic_shear(q, rho)
     q_top = _interp_at_rho(rho, q, rho_top)
     s_top = _interp_at_rho(rho, s, rho_top)
-    alpha_c = alpha_critical_shape_proxy(machine, q_top, s_top, sim)
+    alpha_c = alpha_critical_shape_proxy(machine, q_top, s_top, k95, d95, sim)
 
     B = machine.Bt
     R = machine.R0
@@ -159,7 +164,7 @@ def pedestal_pressure_height_from_alpha(rho, machine, q, sim, beta_p_guess=0.05)
     q_top = _interp_at_rho(rho, q, rho_top)
     s_top = _interp_at_rho(rho, s, rho_top)
     q_top_safe = _smooth_lower(q_top, 0.3, 1e-3)
-    alpha_c = alpha_critical_shape_proxy(machine, q_top, s_top, sim)
+    alpha_c = alpha_critical_shape_proxy(machine, q_top, s_top, k95, d95, sim)
     dpdr_crit = alpha_c * B**2 / (2.0 * MU0 * R * q_top_safe**2 + 1e-12)
     dp_ped = dpdr_crit * machine.a * width
 

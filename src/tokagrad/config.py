@@ -426,7 +426,7 @@ class SimulationConfig:
     # Multiplicative factor for alpha-critical pedestal model.
     pedestal_alpha_min: float = 1.0
     # Lower bound for alpha_critical.
-    pedestal_alpha_max: float = 8.0
+    pedestal_alpha_max: float = 4.0
     # Upper bound for alpha_critical.
     pedestal_pressure_relax_tau: float = 0.005
     # Relaxation time toward pedestal pressure/temperature targets [s].
