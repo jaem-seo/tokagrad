@@ -177,6 +177,68 @@ def _update_simulation(sim: SimulationConfig, updates: Mapping[str, Any], base_d
     return replace(sim, **out) if out else sim
 
 
+def _geqdsk_boundary_machine_updates(sim: SimulationConfig) -> dict[str, float]:
+    """Infer MachineConfig shape parameters from the active GEQDSK LCFS.
+
+    In ``geqdsk_prescribed`` mode the actual flux surfaces come from the g-file,
+    but many reduced closures still use MachineConfig scalar shape parameters
+    (Greenwald density, EPED inputs, shape-factor proxies, fallback geometry).
+    Keep those scalars consistent with the prescribed LCFS by deriving:
+
+      R0    = (R_out + R_in) / 2
+      a     = (R_out - R_in) / 2
+      kappa = (Z_top - Z_bottom) / (2 a)
+      delta = average upper/lower triangularity, (R0 - R_top/bottom) / a
+    """
+    if getattr(sim, "equilibrium_model", "reduced_fixed_boundary") != "geqdsk_prescribed":
+        return {}
+    path = getattr(sim, "geqdsk_path", "")
+    if not path:
+        return {}
+
+    # Import lazily to avoid making static JSON loading depend on GEQDSK parsing
+    # unless a prescribed-equilibrium input actually requests it.
+    from .equilibrium import read_geqdsk
+    import numpy as np
+
+    g = read_geqdsk(path)
+    r = np.asarray(g.get("rbbbs", []), dtype=float)
+    z = np.asarray(g.get("zbbbs", []), dtype=float)
+    finite = np.isfinite(r) & np.isfinite(z)
+    r = r[finite]
+    z = z[finite]
+    if r.size < 4:
+        return {}
+
+    r_in = float(np.min(r))
+    r_out = float(np.max(r))
+    z_top = float(np.max(z))
+    z_bot = float(np.min(z))
+    a = 0.5 * (r_out - r_in)
+    if not np.isfinite(a) or a <= 0.0:
+        return {}
+
+    R0 = 0.5 * (r_out + r_in)
+    kappa = 0.5 * (z_top - z_bot) / a
+    i_top = int(np.argmax(z))
+    i_bot = int(np.argmin(z))
+    delta_top = (R0 - float(r[i_top])) / a
+    delta_bot = (R0 - float(r[i_bot])) / a
+    delta = 0.5 * (delta_top + delta_bot)
+
+    return {
+        "R0": float(R0),
+        "a": float(a),
+        "kappa": float(kappa),
+        "delta": float(delta),
+    }
+
+
+def _sync_machine_shape_from_geqdsk(machine: MachineConfig, sim: SimulationConfig) -> MachineConfig:
+    updates = _geqdsk_boundary_machine_updates(sim)
+    return replace(machine, **updates) if updates else machine
+
+
 
 
 def _move_density_controls_from_sim_to_actuator(data: dict[str, Any]) -> None:
@@ -225,6 +287,7 @@ def load_static_input(path: str | Path,
         actuator = _update_actuator(actuator, data["actuator"] or {})
     if "simulation" in data:
         sim = _update_simulation(sim, data["simulation"] or {}, base_dir)
+    machine = _sync_machine_shape_from_geqdsk(machine, sim)
     sim = resolve_time_discretization(sim, machine, actuator)
     return machine, actuator, sim
 
@@ -318,6 +381,7 @@ def load_waveform_input(path: str | Path,
         actuator = _update_actuator(actuator, data["actuator"] or {})
     if "simulation" in data:
         sim = _update_simulation(sim, data["simulation"] or {}, base_dir)
+    machine = _sync_machine_shape_from_geqdsk(machine, sim)
     sim = resolve_time_discretization(sim, machine, actuator)
     waveform = waveform_from_input_section(data.get("waveform"), t_end=float(sim.dt) * int(sim.n_steps))
     return machine, actuator, sim, waveform

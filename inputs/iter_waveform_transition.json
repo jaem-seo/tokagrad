@@ -17,7 +17,7 @@
     "heat_width": 0.3,
     "cd_efficiency_20": 0.3,
     "greenwald_fraction_target": 0.9,
-    "greenwald_edge_density_fraction": 0.15
+    "greenwald_edge_density_fraction": 0.2
   },
   "simulation": {
     "nr": 32,
