@@ -38,7 +38,7 @@ Python 3.10 or newer is required.
 python -m pip install -e .
 ```
 
-Optional dependencies:
+Dependencies:
 
 ```bash
 python -m pip install -e '.[optim]'   # Optax
@@ -46,6 +46,18 @@ python -m pip install -e '.[qlknn]'   # fusion_surrogates
 ```
 
 The optimizer contains an internal Adam fallback when Optax is unavailable.
+
+JAX-native TGLF-NN, NEO-NN, and EPED1-NN modes expect the GA `neural`
+repository to be available under `external_models/neural`. If it is not already
+present, clone it into the project-local `external_models/` directory:
+
+```bash
+mkdir -p external_models
+git clone https://github.com/gafusion/neural.git external_models/neural
+```
+
+The default input files use this path through settings such as
+`tglfnn_model_dir`, `neonn_model_dir`, and `eped1nn_model_dir`.
 
 ## Running simulations
 
@@ -221,8 +233,9 @@ settings.
 
 The supported mainline form is diffusive transport. Available turbulent
 closures include `bohm_gyrobohm`, `fusion_surrogates`, and `tglfnn_jax`.
-Neoclassical transport can use the reduced Angioni-Sauter implementation or
-`neonn_jax`. Surrogate diffusivities use `chi_clip_min/max`; the analytic
+Neoclassical transport can use the reduced Angioni-Sauter implementation,
+the positive scalar Chang-Hinton analytic fit, or `neonn_jax`.
+Surrogate diffusivities use `chi_clip_min/max`; the analytic
 Bohm--gyroBohm closure uses its `bohm_chi_min/max` bounds.
 The `bohm_gyrobohm` closure follows the TORAX analytic form: its Bohm term is
 proportional to `r_mid*q^2*abs(grad(p_e))/(B0*n_e)`, its gyro-Bohm term to

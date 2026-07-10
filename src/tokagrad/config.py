@@ -567,7 +567,8 @@ class SimulationConfig:
 
     # Neoclassical model
     neoclassical_transport_model: str = "neonn_jax"
-    # Neoclassical diffusivity contribution: "angioni", "neonn_jax", or "none".
+    # Neoclassical diffusivity contribution: "angioni", "chang_hinton",
+    # "neonn_jax", or "none".
     neonn_model_dir: str = "external_models/neural"
     # NEOjbs-NN model location. Accepts neural root or neonn/jbsnn directory.
     neonn_model_name: str = "jbsnn"
@@ -584,6 +585,19 @@ class SimulationConfig:
     # Multiplier for reduced neoclassical particle diffusivity.
     neoclassical_chi_max: float = 5.0
     # Maximum neoclassical diffusivity contribution [m^2/s].
+    chang_hinton_particle_fraction: float = 0.2
+    # Reduced particle diffusivity fraction for the analytic Chang-Hinton model:
+    # Dn = fraction * sqrt(chi_e * chi_i).
+    chang_hinton_epsilon_min: float = 0.03
+    # Minimum inverse-aspect-ratio epsilon used by the Chang-Hinton scalar fit.
+    # The large-aspect-ratio formula is singular as epsilon -> 0, so this
+    # regularizes only the innermost cells.
+    neoclassical_abs_effective_diffusivity: bool = True
+    # If true, convert negative Angioni-Sauter effective scalar diffusivities
+    # to positive outward-diffusion magnitudes before clipping.  This is a
+    # diagnostic/reduced-model option because the full neoclassical response
+    # can include pinch and cross-gradient terms whose projection onto a scalar
+    # chi/D may be sign-indefinite.
     neoclassical_shaing_ion_mode: str = "off"
     # Optional Shaing near-axis ion heat transport correction. Options:
     # "off"/"none", "blend", "add" (localized additive),

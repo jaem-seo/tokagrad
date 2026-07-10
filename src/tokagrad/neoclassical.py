@@ -2,6 +2,8 @@
 
 References:
   [C. Angioni and O. Sauter, Phys. Plasmas 7, 1224 (2000)] -- K/L matrices.
+  [C. S. Chang and F. L. Hinton, Phys. Fluids 25, 1493 (1982)] -- reduced
+    analytic ion thermal diffusivity fit.
   [O. Sauter et al., Phys. Plasmas 6, 2834 (1999)] -- bootstrap/conductivity.
   [W. A. Houlberg et al., Phys. Plasmas 4, 3230 (1997)] -- arbitrary regime.
 
@@ -47,6 +49,12 @@ def _maybe_bound(x, lo, hi, sim, width=1.0e-3):
     if getattr(sim, 'differentiable_smooth_mode', False):
         return _smooth_bounded(x, lo, hi, width)
     return jnp.clip(x, lo, hi)
+
+
+def _maybe_abs(x, sim, width=1.0e-8):
+    if getattr(sim, 'differentiable_smooth_mode', False):
+        return jnp.sqrt(x * x + width * width)
+    return jnp.abs(x)
 
 
 def _main_ion_density_fraction(machine):
@@ -363,6 +371,105 @@ def _shaing_blend_alpha(rho, sim):
     rate = float(getattr(sim, "neoclassical_shaing_blend_rate", 5.0)) if sim is not None else 5.0
     return 1.0 / (1.0 + jnp.exp(-2.0 * rate * (jnp.asarray(rho) - start)))
 
+
+def chang_hinton_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, eq=None):
+    """Reduced positive scalar neoclassical diffusivities [m^2/s].
+
+    The ion heat channel uses the common Chang-Hinton all-collisionality fit,
+    written as a positive scalar diffusivity proportional to
+    ``q^2 rho_i^2 nu_ii / epsilon^(3/2)`` with banana/plateau/Pfirsch-Schlueter
+    interpolation terms [C. S. Chang and F. L. Hinton, Phys. Fluids 25, 1493
+    (1982)].  This avoids the sign-indefinite scalar projection of the full
+    Angioni-Sauter flux-force matrix and is intended as a robust analytic
+    comparison model.
+
+    Electron heat and particle channels are reduced random-walk estimates using
+    the same collisionality interpolation scale.  They are positive by
+    construction and deliberately simple; tune ``neoclassical_chi_scale`` and
+    ``neoclassical_D_scale`` when matching a higher-fidelity neoclassical code.
+    """
+    rho = jnp.asarray(rho)
+    Te = _maybe_lower(jnp.asarray(Te), 0.05, sim, 1.0e-3)
+    Ti = _maybe_lower(jnp.asarray(Ti), 0.05, sim, 1.0e-3)
+    ne20 = _maybe_lower(jnp.asarray(ne20), 0.03, sim, 1.0e-4)
+    q_abs = _maybe_bound(jnp.abs(jnp.asarray(q)), 0.2, 20.0, sim, 1.0e-2)
+    Zeff = _maybe_lower(jnp.asarray(getattr(machine, "Zeff", 1.0)), 1.0, sim, 1.0e-3) + jnp.zeros_like(rho)
+    Zi = jnp.ones_like(rho)
+    Ai = effective_ion_mass_amu(machine) + jnp.zeros_like(rho)
+
+    Rmaj, _rminor, epsilon, _delta, _B2_avg, _Bm2_avg, _F, _dpsi_dr, B0 = _geometry_profiles(
+        rho, machine, sim, eq=eq
+    )
+    eps_min = float(getattr(sim, "chang_hinton_epsilon_min", 0.03)) if sim is not None else 0.03
+    eps = _maybe_bound(epsilon, eps_min, 0.95, sim, 1.0e-4)
+    R_safe = _maybe_lower(Rmaj, 0.1, sim, 1.0e-3)
+    B_abs = _maybe_lower(jnp.abs(B0), 0.05, sim, 1.0e-3)
+
+    f_main = _main_ion_density_fraction(machine)
+    ne_m3 = ne20 * 1.0e20
+    ni_m3 = ne_m3 * f_main
+    Te_eV = Te * 1.0e3
+    Ti_eV = Ti * 1.0e3
+    Te_J = Te * KEV_TO_J
+    Ti_J = Ti * KEV_TO_J
+
+    lnLe = sauter_ln_lambda_e(ne_m3, Te_eV)
+    lnLii = sauter_ln_lambda_ii(ni_m3, Ti_eV, Zi)
+    nue_star = 6.921e-18 * q_abs * R_safe * ne_m3 * Zeff * lnLe / (Te_eV**2 * eps**1.5 + 1.0e-30)
+    nui_star = 4.90e-18 * q_abs * R_safe * ni_m3 * Zi**4 * lnLii / (Ti_eV**2 * eps**1.5 + 1.0e-30)
+    nue_star = jnp.maximum(nue_star, 0.0)
+    nui_star = jnp.maximum(nui_star, 0.0)
+
+    meff_i = Ai * M_AMU
+    vte = jnp.sqrt(2.0 * Te_J / (M_E + 1.0e-30))
+    vti = jnp.sqrt(2.0 * Ti_J / (meff_i + 1.0e-30))
+    nue = nue_star * eps**1.5 * vte / (q_abs * R_safe + 1.0e-30)
+    nui = nui_star * eps**1.5 * vti / (q_abs * R_safe + 1.0e-30)
+
+    rho_e = M_E * vte / (E_CHARGE * B_abs + 1.0e-30)
+    rho_i = meff_i * vti / (E_CHARGE * Zi * B_abs + 1.0e-30)
+    base_e = q_abs**2 * rho_e**2 * nue / (eps**1.5 + 1.0e-30)
+    base_i = q_abs**2 * rho_i**2 * nui / (eps**1.5 + 1.0e-30)
+
+    sqrt_eps = jnp.sqrt(eps)
+    sqrt_nui = jnp.sqrt(jnp.maximum(nui_star, 0.0))
+    alpha_I = _impurity_strength_alpha_I(machine) + jnp.zeros_like(rho)
+
+    banana_plateau = (
+        0.66 * (1.0 + 1.54 * alpha_I)
+        + (1.88 * sqrt_eps - 1.54 * eps) * (1.0 + 3.75 * alpha_I)
+    ) / (1.0 + 1.03 * sqrt_nui + 0.31 * nui_star + 1.0e-30)
+    ps_factor = 1.0 + 1.33 * alpha_I * (1.0 + 0.60 * alpha_I) / (1.0 + 1.79 * alpha_I + 1.0e-30)
+    pfirsch_schlueter = 0.59 * eps * nui_star / (1.0 + 0.74 * eps**1.5 * nui_star + 1.0e-30) * ps_factor
+    chi_i = base_i * jnp.maximum(banana_plateau + pfirsch_schlueter, 0.0)
+
+    # Reduced positive electron/particle channels.  The same interpolation shape
+    # is used for electrons, but with a conservative coefficient because the
+    # Chang-Hinton fit itself is an ion heat conductivity model.
+    sqrt_nue = jnp.sqrt(jnp.maximum(nue_star, 0.0))
+    e_interp = (
+        0.66 + 1.88 * sqrt_eps - 1.54 * eps
+    ) / (1.0 + 1.03 * sqrt_nue + 0.31 * nue_star + 1.0e-30)
+    e_interp = e_interp + 0.59 * eps * nue_star / (1.0 + 0.74 * eps**1.5 * nue_star + 1.0e-30)
+    chi_e = 0.5 * base_e * jnp.maximum(e_interp, 0.0)
+
+    particle_fraction = float(getattr(sim, "chang_hinton_particle_fraction", 0.2)) if sim is not None else 0.2
+    Dn = particle_fraction * jnp.sqrt(jnp.maximum(chi_e * chi_i, 0.0))
+
+    chi_e = _axis_copy_first(chi_e)
+    chi_i = _axis_copy_first(chi_i)
+    Dn = _axis_copy_first(Dn)
+
+    chi_e = getattr(sim, "neoclassical_chi_scale", 1.0) * chi_e
+    chi_i = getattr(sim, "neoclassical_chi_scale", 1.0) * chi_i
+    Dn = getattr(sim, "neoclassical_D_scale", 1.0) * Dn
+    hi = getattr(sim, "neoclassical_chi_max", 5.0)
+    return (
+        _maybe_bound(chi_e, 0.0, hi, sim, 1.0e-2),
+        _maybe_bound(chi_i, 0.0, hi, sim, 1.0e-2),
+        _maybe_bound(Dn, 0.0, hi, sim, 1.0e-2),
+    )
+
 def angioni_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, eq=None, _allow_neonn_fallback: bool = True):
     """Angioni-Sauter neoclassical chi_e, chi_i, and D_e:
     construct the Angioni-Sauter K_mn matrices, dimensional L_mn matrices,
@@ -378,6 +485,8 @@ def angioni_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, eq=No
     if model == "neonn_jax" and _allow_neonn_fallback:
         from .neonn_jax import neonn_jax_diffusivities
         return neonn_jax_diffusivities(rho, Te, Ti, ne20, q, machine, sim)
+    if model in ("chang_hinton", "chang-hinton", "hinton_chang"):
+        return chang_hinton_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, eq=eq)
 
     rho = jnp.asarray(rho)
     Te = _maybe_lower(jnp.asarray(Te), 0.05, sim, 1.0e-3)
@@ -448,6 +557,11 @@ def angioni_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, eq=No
     chi_e = _axis_copy_first(chi_e)
     chi_i = _axis_copy_first(chi_i)
     Dn = _axis_copy_first(Dn)
+
+    if bool(getattr(sim, "neoclassical_abs_effective_diffusivity", True)):
+        chi_e = _maybe_abs(chi_e, sim, 1.0e-8)
+        chi_i = _maybe_abs(chi_i, sim, 1.0e-8)
+        Dn = _maybe_abs(Dn, sim, 1.0e-10)
 
     # Optional Shaing-Hazeltine-Zarnstorff near-axis correction for ion heat
     # transport.  Shaing is a near-axis ion model,
