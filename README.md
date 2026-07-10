@@ -121,6 +121,10 @@ python scripts/run_optimization.py \
 python scripts/run_optimization.py \
   --input-file inputs/reactor_design.json
 ```
+<p align="center">
+  <img src="https://github.com/jaem-seo/tokagrad/blob/main/images/_run_simulation.png">
+</p>
+
 
 Scalar controls can include `Ip_MA`, `Bt`, `P_aux_MW`,
 `greenwald_fraction_target`, `R0`, `a`, `kappa`, and `delta`. Objectives can
