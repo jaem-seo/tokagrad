@@ -8,7 +8,7 @@ automatic-differentiation-based actuator optimization, and an interactive
 Streamlit digital-twin interface.
 
 TokaGrad is intended for rapid scenario exploration, control studies, and
-surrogate-model development. It is not a replacement for validated integrated
+reactor design optimization. It is not a replacement for validated integrated
 modelling systems such as ASTRA, JINTRAC, RAPTOR, TORAX, or TRANSP, nor for a
 full Grad-Shafranov or gyrokinetic solver.
 
