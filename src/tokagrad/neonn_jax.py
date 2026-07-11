@@ -9,6 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 import re
+import warnings
 import jax
 import jax.numpy as jnp
 
@@ -168,9 +169,11 @@ def neonn_jax_diffusivities(rho, Te, Ti, ne20, q, machine, sim):
         cte = _maybe_abs(od.get('OUT_cte', 0.0), sim, 1e-8)
         cni = 0.5 * (_maybe_abs(od.get('OUT_cni1', 0.0), sim, 1e-8) + _maybe_abs(od.get('OUT_cni2', 0.0), sim, 1e-8))
         cti = 0.5 * (_maybe_abs(od.get('OUT_cti1', 0.0), sim, 1e-8) + _maybe_abs(od.get('OUT_cti2', 0.0), sim, 1e-8))
-        # Map dimensionless coefficient-like outputs to the same order of m^2/s
-        # as the previous Angioni closure.  This is a differentiable reduced
-        # closure; calibrate neonn_transport_scale against a trusted NEO run.
+        # The public NEOjbs-NN files are bootstrap-current-oriented BrainFUSE
+        # networks.  TokaGrad exposes their coefficient-like transport outputs as
+        # a reduced, calibrated diffusivity closure rather than a first-principles
+        # NEO solver; calibrate neonn_transport_scale against a trusted NEO run
+        # before treating these values quantitatively.
         eps = vals['in1_eps']
         banana = jnp.sqrt(_maybe_lower(eps, 1e-4, sim, 1e-5))
         temp_fac = jnp.sqrt(_maybe_lower(Ti, 0.05, sim, 1e-4) / 5.0)
@@ -180,8 +183,15 @@ def neonn_jax_diffusivities(rho, Te, Ti, ne20, q, machine, sim):
         Dn = getattr(sim, 'neoclassical_D_scale', 1.0) * base * cne
         hi = getattr(sim, 'neoclassical_chi_max', 5.0)
         return (_maybe_bound(chi_e, 0.0, hi, sim, 1e-2), _maybe_bound(chi_i, 0.0, hi, sim, 1e-2), _maybe_bound(Dn, 0.0, hi, sim, 1e-2))
-    except Exception:
+    except Exception as exc:
         if getattr(sim, 'neonn_fail_mode', 'fallback') == 'raise':
             raise
+        warnings.warn(
+            "neonn_jax_diffusivities failed and is falling back to the Angioni "
+            f"analytic closure. Set neonn_fail_mode='raise' to debug the neural "
+            f"model path. Original error: {type(exc).__name__}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         from .neoclassical import angioni_neoclassical_diffusivities
         return angioni_neoclassical_diffusivities(rho, Te, Ti, ne20, q, machine, sim, _allow_neonn_fallback=False)

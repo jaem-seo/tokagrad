@@ -10,7 +10,7 @@ TokaGrad conventions and are not part of the original empirical limits.
 """
 
 import jax.numpy as jnp
-from .grid import make_grid_from_config, axis_extrapolated_value, axis_augmented_profile, axis_augmented_volume_element, axis_augmented_volume_element_from_dV_drho
+from .grid import make_grid_from_config, infer_rho_faces, axis_extrapolated_value, axis_augmented_profile, axis_augmented_volume_element, axis_augmented_volume_element_from_dV_drho
 from .equilibrium import solve_fixed_boundary_equilibrium
 from .heating import total_heating_sources, fusion_power_density_DT_MW_m3
 from .current import effective_current_drive_fraction
@@ -36,6 +36,21 @@ def volume_average_axis_augmented(y, rho, machine, dV_drho=None):
     rho_aug, y_aug = axis_augmented_profile(rho, y)
     dV = _axis_volume_weights(rho, machine, dV_drho=dV_drho)
     return jnp.sum(y_aug * dV) / (jnp.sum(dV) + 1e-12)
+
+
+def line_average_profile(y, rho):
+    """Center-chord radial line average, matching solver feedback convention."""
+    rho_f = infer_rho_faces(rho)
+    drho = rho_f[1:] - rho_f[:-1]
+    return jnp.sum(y * drho) / (jnp.sum(drho) + 1.0e-12)
+
+
+def density_average_for_greenwald_metric(y, rho, machine, sim, dV_drho=None):
+    """Density average used for the public ``greenwald_fraction`` diagnostic."""
+    basis = str(getattr(sim, "greenwald_feedback_average_basis", "volume")).lower()
+    if basis in ("line", "line_average", "line-averaged", "chord", "chord_average"):
+        return line_average_profile(y, rho)
+    return volume_average_axis_augmented(y, rho, machine, dV_drho=dV_drho)
 
 
 def power_integral_axis_augmented(y, rho, machine, dV_drho=None):
@@ -217,6 +232,10 @@ def compute_diagnostics(
 
     nG_1e20 = (machine.Ip / 1.0e6) / (jnp.pi * machine.a**2 + 1e-12)
     nbar_vol_1e20 = volume_average_axis_augmented(state.ne20, rho, machine, dV_drho=dV_diag)
+    nbar_line_1e20 = line_average_profile(state.ne20, rho)
+    nbar_feedback_1e20 = density_average_for_greenwald_metric(
+        state.ne20, rho, machine, sim, dV_drho=dV_diag
+    )
 
     Te_axis = axis_extrapolated_value(state.Te, rho)
     Ti_axis = axis_extrapolated_value(state.Ti, rho)
@@ -232,8 +251,12 @@ def compute_diagnostics(
         "Te_avg_keV": volume_average_axis_augmented(state.Te, rho, machine, dV_drho=dV_diag),
         "Ti_avg_keV": volume_average_axis_augmented(state.Ti, rho, machine, dV_drho=dV_diag),
         "ne_avg_1e20": nbar_vol_1e20,
+        "ne_line_avg_1e20": nbar_line_1e20,
+        "ne_greenwald_avg_1e20": nbar_feedback_1e20,
         "n_greenwald_1e20": nG_1e20,
-        "greenwald_fraction": nbar_vol_1e20 / (nG_1e20 + 1e-12),
+        "greenwald_fraction": nbar_feedback_1e20 / (nG_1e20 + 1e-12),
+        "greenwald_fraction_volume": nbar_vol_1e20 / (nG_1e20 + 1e-12),
+        "greenwald_fraction_line": nbar_line_1e20 / (nG_1e20 + 1e-12),
         "q0": q[0],
         "q95": q95_value,
         "q_edge": q_edge_lcfs,

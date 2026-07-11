@@ -281,8 +281,9 @@ def _calculate_Lmn(Kmn_e, Kmn_i, Te, Ti, ne_m3, ni_m3, q, Rmaj, epsilon, F, dpsi
     vti = jnp.sqrt(2.0 * Ti_J / (Ai * M_AMU))
     tau_e = q * Rmaj / (nue_star * epsilon**1.5 * vte + 1.0e-30)
     tau_i = q * Rmaj / (nui_star * epsilon**1.5 * vti + 1.0e-30)
-    r_larmor_e = M_E * vte / E_CHARGE
-    r_larmor_i = M_AMU * Ai * vti / (E_CHARGE * Zi)
+    B0_safe = _maybe_lower(jnp.abs(B0), 1.0e-4, None)
+    r_larmor_e = M_E * vte / (E_CHARGE * B0_safe)
+    r_larmor_i = M_AMU * Ai * vti / (E_CHARGE * Zi * B0_safe)
     dpsi_dr = _signed_floor(dpsi_dr, 1.0e-10)
     Ld = ne_m3 * r_larmor_e**2 / (tau_e + 1.0e-30) * dpsi_dr**2
     Ldi = ni_m3 * r_larmor_i**2 / (tau_i + 1.0e-30) * dpsi_dr**2

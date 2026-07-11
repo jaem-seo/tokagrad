@@ -415,7 +415,16 @@ def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, f
     if save_path:
         fig.savefig(save_path, dpi=160, bbox_inches="tight")
     if show:
-        plt.show()
+        try:
+            plt.show()
+        except Exception as exc:
+            print(
+                "Matplotlib show() failed for the static final plot "
+                f"({type(exc).__name__}: {exc}). "
+                "Use --no-show --save-figure <path> on headless/X11-limited systems.",
+                flush=True,
+            )
+            plt.close(fig)
     else:
         plt.close(fig)
     return fig
@@ -1195,13 +1204,13 @@ def main(argv=None):
         timer.mark("result saving")
 
     print("\nInitial diagnostics:")
-    for k in ("Te0_keV", "Ti0_keV", "ne_avg_1e20", "greenwald_fraction", "Q", "P_fus_MW", "beta_N"):
+    for k in ("Te0_keV", "Ti0_keV", "ne_avg_1e20", "greenwald_fraction", "greenwald_fraction_volume", "greenwald_fraction_line", "Q", "P_fus_MW", "beta_N"):
         if k in diag0:
-            print(f"  {k:<22s} {float(diag0[k]):.6g}")
+            print(f"  {k:<30s} {float(diag0[k]):.6g}")
     print("Final diagnostics:")
-    for k in ("Te0_keV", "Ti0_keV", "ne_avg_1e20", "greenwald_fraction", "Q", "P_fus_MW", "P_aux_abs_MW", "tau_E_s", "beta_N"):
+    for k in ("Te0_keV", "Ti0_keV", "ne_avg_1e20", "greenwald_fraction", "greenwald_fraction_volume", "greenwald_fraction_line", "Q", "P_fus_MW", "P_aux_abs_MW", "tau_E_s", "beta_N"):
         if k in diagf:
-            print(f"  {k:<22s} {float(diagf[k]):.6g}")
+            print(f"  {k:<30s} {float(diagf[k]):.6g}")
     if zero_d_enabled(sim):
         try:
             t_axis = _simulation_times(sim, hist)

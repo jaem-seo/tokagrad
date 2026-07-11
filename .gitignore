@@ -1,2 +1,4 @@
 __pycache__/
 external_models/neural
+outputs/
+.DS_Store

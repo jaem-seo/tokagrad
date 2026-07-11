@@ -26,7 +26,13 @@ import jax.numpy as jnp
 from .config import MachineConfig, ActuatorConfig, SimulationConfig
 from .solver import initial_state, simulate_final_dynamic_jit
 from .zero_d import zero_d_enabled, initial_state_0d, simulate_0d_final_dynamic_jit
-from .diagnostics import fusion_power_MW, beta_normalized_total, volume_average_axis_augmented
+from .diagnostics import (
+    fusion_power_MW,
+    beta_normalized_total,
+    volume_average_axis_augmented,
+    line_average_profile,
+    density_average_for_greenwald_metric,
+)
 from .grid import make_grid_from_config
 from .current import current_components_from_state, q_profile, total_current, edge_q_from_boundary_geometry
 from .equilibrium import solve_fixed_boundary_equilibrium
@@ -74,6 +80,9 @@ def make_gradient_friendly_sim(
         density_evolution_model=base_sim.density_evolution_model,
         density_feedback_tau=base_sim.density_feedback_tau,
         density_source_max_delta=base_sim.density_source_max_delta,
+        density_feedback_method=base_sim.density_feedback_method,
+        greenwald_feedback_average_basis=base_sim.greenwald_feedback_average_basis,
+        density_boundary_source_width=base_sim.density_boundary_source_width,
         differentiable_smooth_mode=True,
         #pedestal_lh_transition_control=True,
         pedestal_lh_margin=0.20,
@@ -86,7 +95,18 @@ def make_gradient_friendly_sim(
         include_radiation_losses=True,
         include_alpha_heating=True,
         alpha_partition_model="slowing_down",
-        neoclassical_transport_model="angioni",
+        neoclassical_transport_model=base_sim.neoclassical_transport_model,
+        neoclassical_abs_effective_diffusivity=base_sim.neoclassical_abs_effective_diffusivity,
+        neonn_fail_mode=base_sim.neonn_fail_mode,
+        neonn_model_dir=base_sim.neonn_model_dir,
+        neonn_model_name=base_sim.neonn_model_name,
+        neonn_jax_max_nets=base_sim.neonn_jax_max_nets,
+        neonn_transport_scale=base_sim.neonn_transport_scale,
+        neoclassical_chi_scale=base_sim.neoclassical_chi_scale,
+        neoclassical_D_scale=base_sim.neoclassical_D_scale,
+        neoclassical_chi_max=base_sim.neoclassical_chi_max,
+        chang_hinton_particle_fraction=base_sim.chang_hinton_particle_fraction,
+        chang_hinton_epsilon_min=base_sim.chang_hinton_epsilon_min,
         freeze_temperature_profiles=False,
     )
 
@@ -117,8 +137,12 @@ def differentiable_metrics(
     Q = P_fus / P_aux
     beta_N = beta_normalized_total(final_state, machine, actuator, sim=sim, eq=eq)
     ne_avg = volume_average_axis_augmented(final_state.ne20, rho, machine, dV_drho=eq.dV_drho)
+    ne_line_avg = line_average_profile(final_state.ne20, rho)
+    ne_greenwald_avg = density_average_for_greenwald_metric(
+        final_state.ne20, rho, machine, sim, dV_drho=eq.dV_drho
+    )
     nG_1e20 = (machine.Ip / 1.0e6) / (jnp.pi * machine.a**2 + 1e-12)
-    fG = ne_avg / (nG_1e20 + 1e-12)
+    fG = ne_greenwald_avg / (nG_1e20 + 1e-12)
 
     return {
         "P_fus_MW": P_fus,
@@ -129,9 +153,13 @@ def differentiable_metrics(
         "q95": q95_value,
         "q_edge": q_edge_lcfs,
         "greenwald_fraction": fG,
+        "greenwald_fraction_volume": ne_avg / (nG_1e20 + 1e-12),
+        "greenwald_fraction_line": ne_line_avg / (nG_1e20 + 1e-12),
         "Te0_keV": final_state.Te[0],
         "Ti0_keV": final_state.Ti[0],
         "ne_avg_1e20": ne_avg,
+        "ne_line_avg_1e20": ne_line_avg,
+        "ne_greenwald_avg_1e20": ne_greenwald_avg,
         "I_total_MA": total_current(rho, j_total, machine, eq=eq) / 1.0e6,
         "Ip_MA": machine.Ip / 1.0e6,
     }
@@ -441,8 +469,13 @@ def differentiable_metrics_ad_clean(
     beta_N = beta_normalized_total(final_state, machine, actuator, sim=sim, eq=eq)
 
     ne_avg = volume_average_axis_augmented(final_state.ne20, rho, machine, dV_drho=eq.dV_drho)
+    ne_line_avg = line_average_profile(final_state.ne20, rho)
+    ne_greenwald_avg = density_average_for_greenwald_metric(
+        final_state.ne20, rho, machine, sim, dV_drho=eq.dV_drho
+    )
     nG_1e20 = (machine.Ip / 1.0e6) / (jnp.pi * machine.a**2 + 1e-12)
-    fG = ne_avg / smooth_lower(nG_1e20, 1e-6, 1e-6)
+    nG_safe = smooth_lower(nG_1e20, 1e-6, 1e-6)
+    fG = ne_greenwald_avg / nG_safe
 
     return {
         "P_fus_MW": P_fus,
@@ -453,9 +486,13 @@ def differentiable_metrics_ad_clean(
         "q95": q95_value,
         "q_edge": q_edge_lcfs,
         "greenwald_fraction": fG,
+        "greenwald_fraction_volume": ne_avg / nG_safe,
+        "greenwald_fraction_line": ne_line_avg / nG_safe,
         "Te0_keV": final_state.Te[0],
         "Ti0_keV": final_state.Ti[0],
         "ne_avg_1e20": ne_avg,
+        "ne_line_avg_1e20": ne_line_avg,
+        "ne_greenwald_avg_1e20": ne_greenwald_avg,
         "I_total_MA": total_current(rho, j_total, machine, eq=eq) / 1.0e6,
         "Ip_MA": machine.Ip / 1.0e6,
     }

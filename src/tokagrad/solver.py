@@ -546,7 +546,12 @@ def greenwald_feedback_average_profile(y, rho, dV_drho, sim):
     )
 
 def greenwald_target_density_1e20(machine, actuator_or_sim, sim=None):
-    """Target volume-averaged density from the requested Greenwald fraction."""
+    """Target density scalar from the requested Greenwald fraction.
+
+    The scalar target is f_G*n_G; the controller decides whether this target is
+    applied to a volume- or line-averaged density through
+    ``greenwald_feedback_average_basis``.
+    """
     if sim is None:
         # Backward-compatible call: greenwald_target_density_1e20(machine, actuator, sim)
         sim = actuator_or_sim
@@ -823,13 +828,15 @@ def greenwald_boundary_particle_source(rho, ne20, dV_drho, machine, actuator, si
     shape = jnp.exp(-0.5 * ((rho - 1.0) / (sim.density_boundary_source_width + 1e-8)) ** 2)
     shape = shape / (greenwald_feedback_average_profile(shape, rho, dV_drho, sim) + 1e-12)
 
-    # Source is in 1e20 m^-3 / s and changes volume average by delta/tau.
+    # Source is in 1e20 m^-3 / s and changes the selected feedback average by
+    # delta/tau.  It may be negative, in which case this reduced controller acts
+    # as an edge sink and relaxes an over-dense profile back toward target.
     source = shape * delta / (sim.density_feedback_tau + 1e-12)
     #source = shape * delta / (sim.dt + 1e-12)
     max_rate = sim.density_source_max_delta / (sim.dt + 1e-12)
     if getattr(sim, "differentiable_smooth_mode", False):
         return smooth_symmetric_limit(source, max_rate, getattr(sim, "smooth_rate_width", 1.0e-2) / (sim.dt + 1e-12))
-    return jnp.clip(source, 0.0, max_rate)
+    return jnp.clip(source, -max_rate, max_rate)
 
 def apply_density_model_after_update(ne_candidate, state, rho, Dn, ne_source, eq, machine, actuator, sim, semi_implicit=True):
     """Apply selected density closure."""

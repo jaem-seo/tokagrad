@@ -201,7 +201,7 @@ class SimulationConfig:
     # Density average used by greenwald_feedback. "volume" uses the current
     # volume-weighted average; "line" uses a center-chord radial line average
     # int_0^1 n(rho) d rho.  The target density is still f_G*n_G.
-    density_feedback_method: str = "implicit_response"
+    density_feedback_method: str = "implicit_source"
     # Greenwald feedback implementation. "implicit_source" injects the feedback
     # as a source in the density solve itself, avoiding both post-step edge
     # humps and an extra response solve. "implicit_response" keeps the previous
@@ -602,12 +602,12 @@ class SimulationConfig:
     # Minimum inverse-aspect-ratio epsilon used by the Chang-Hinton scalar fit.
     # The large-aspect-ratio formula is singular as epsilon -> 0, so this
     # regularizes only the innermost cells.
-    neoclassical_abs_effective_diffusivity: bool = True
+    neoclassical_abs_effective_diffusivity: bool = False
     # If true, convert negative Angioni-Sauter effective scalar diffusivities
     # to positive outward-diffusion magnitudes before clipping.  This is a
-    # diagnostic/reduced-model option because the full neoclassical response
-    # can include pinch and cross-gradient terms whose projection onto a scalar
-    # chi/D may be sign-indefinite.
+    # diagnostic/reduced-model option, kept off by default, because the full
+    # neoclassical response can include pinch and cross-gradient terms whose
+    # projection onto a scalar chi/D may be sign-indefinite.
     neoclassical_shaing_ion_mode: str = "off"
     # Optional Shaing near-axis ion heat transport correction. Options:
     # "off"/"none", "blend", "add" (localized additive),
