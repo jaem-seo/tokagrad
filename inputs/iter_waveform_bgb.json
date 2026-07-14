@@ -1,0 +1,156 @@
+{
+  "description": "ITER-like waveform simulation. Shape waveforms are omitted because the bundled GEQDSK supplies the boundary and nested surfaces.",
+  "machine": {
+    "R0": 6.2,
+    "a": 2.0,
+    "Bt": 5.3,
+    "Ip_MA": 15.0,
+    "kappa": 1.8,
+    "delta": 0.33,
+    "Zeff": 1.8,
+    "plasma_species": "DT",
+    "impurity_Z": 74.0
+  },
+  "actuator": {
+    "P_aux_MW": 50.0,
+    "heat_center": 0.2,
+    "heat_width": 0.3,
+    "cd_efficiency_20": 0.3,
+    "greenwald_fraction_target": 0.9,
+    "greenwald_edge_density_fraction": 0.2
+  },
+  "simulation": {
+    "nr": 32,
+    "ntheta": 32,
+    "dt": 0.001,
+    "end_time_s": 150.0,
+    "equilibrium_skip_steps": 1000000,
+    "source_skip_steps": 1,
+    "transport_skip_steps": 10,
+    "pedestal_skip_steps": 10,
+    "equilibrium_model": "geqdsk_prescribed",
+    "geqdsk_path": "ITERbaseline.eqdsk",
+    "current_evolution_model": "psi_diffusion",
+    "density_evolution_model": "greenwald_feedback",
+    "density_boundary_source_width": 0.05,
+    "transport_model": "bohm_gyrobohm",
+    "bohm_chi_e_bohm_coeff": 1.0e-4,
+    "bohm_chi_i_bohm_coeff": 1.0e-4,
+    "bohm_chi_e_gyrobohm_coeff": 1.0e-5,
+    "bohm_chi_i_gyrobohm_coeff": 1.0e-5,
+    "neoclassical_transport_model": "chang_hinton",
+    "pedestal_model": "alpha_critical",
+    "pedestal_enforcement": "tanh_underlay",
+    "pedestal_lh_threshold_model": "delabie",
+    "initial_beta_N_target": 0.5,
+    "initial_profile_model": "parabolic"
+  },
+  "waveform": {
+    "name": "iter_like_from_input_file",
+    "times": [
+      0.0,
+      15.0,
+      50.0,
+      70.0,
+      100.0,
+      120.0,
+      150.0
+    ],
+    "controls": {
+      "Ip_MA": [
+        1.0,
+        5.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0
+      ],
+      "P_aux_MW": [
+        0.0,
+        10.0,
+        20.0,
+        50.0,
+        73.0,
+        50.0,
+        50.0
+      ],
+      "Bt": [
+        5.3,
+        5.3,
+        5.3,
+        5.3,
+        5.3,
+        5.3,
+        5.3
+      ],
+      "heat_center": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "heat_width": [
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3
+      ]
+    },
+    "interpolation": {
+      "default": "linear",
+      "P_aux_MW": "step"
+    }
+  },
+  "optimization": {
+    "n_iter": 10,
+    "gradient_mode": "autodiff",
+    "learning_rate": 1.0,
+    "objective": [
+      "Qfinal",
+      "Pfusfinal" 
+    ],  
+    "objective_weights": [
+      1.0,
+      0.01
+    ],  
+    "controls": [
+      "Ip_MA",
+      "P_aux_MW"
+    ],  
+    "bounds": {
+      "Ip_MA": [5.0, 17.0],
+      "P_aux_MW": [5.0, 73.0]
+    },  
+    "constraints": [
+      {
+        "metric": "q95",
+        "kind": "lower",
+        "value": 3.0,
+        "weight": 10.0
+      },
+      {
+        "metric": "beta_N",
+        "kind": "upper",
+        "value": 3.0,
+        "weight": 10.0
+      }
+    ],
+    "fixed_start": true,
+    "fixed_final": true,
+    "fixed_endpoint_keys": [
+      "Ip_MA",
+      "P_aux_MW"
+    ],
+    "smoothness_weight": 0.0,
+    "slew_weight": 0.0,
+    "max_grad_norm": 10.0,
+    "max_update_norm": 0.75
+  }
+}
