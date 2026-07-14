@@ -32,7 +32,7 @@ full Grad-Shafranov or gyrokinetic solver.
 
 ## Installation
 
-Python 3.10 or newer is required.
+Python 3.11 or newer is required.
 
 ```bash
 python -m pip install -e .

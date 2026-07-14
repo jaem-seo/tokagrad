@@ -2,7 +2,7 @@
 name = "TokaGrad"
 version = "0.1.0"
 description = "Full-discharge end-to-end differentiable 1.5D tokamak simulator"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "jax",
   "jaxlib",
