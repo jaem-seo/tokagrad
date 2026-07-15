@@ -359,3 +359,13 @@ The external `fusion_surrogates` adapter can be checked separately with:
 ```bash
 python scripts/check_fusion_surrogates.py
 ```
+
+## Citing
+```
+@misc{seo2026tokagrad,
+      title={TokaGrad: End-to-end differentiable tokamak simulator for L-to-H full scenario optimization}, 
+      author={Jaemin Seo},
+      year={2026},
+      url={https://arxiv.org/abs/2607.09088}, 
+}
+```
