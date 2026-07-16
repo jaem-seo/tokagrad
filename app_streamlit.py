@@ -173,7 +173,7 @@ def build_sidebar():
     )
     running = st.sidebar.toggle("Run continuously", value=st.session_state.get("running", False))
     st.session_state.running = running
-    steps_per_refresh = st.sidebar.slider("Steps per refresh", 1, 500, 100, 1)
+    steps_per_refresh = st.sidebar.slider("Steps per refresh", 1, 1000, 500, 10)
     #refresh_delay = st.sidebar.slider("Refresh delay [s]", 0.0, 0.5, 0.0, 0.01)
     use_jit_chunk = st.sidebar.checkbox(
         "Use JIT chunk advance",

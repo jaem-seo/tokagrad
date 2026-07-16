@@ -17,19 +17,18 @@
     "heat_width": 0.3,
     "cd_efficiency_20": 0.3,
     "greenwald_fraction_target": 0.9,
-    "greenwald_edge_density_fraction": 0.2
+    "greenwald_edge_density_fraction": 0.15
   },
   "simulation": {
     "nr": 32,
     "ntheta": 32,
     "dt": 0.001,
     "end_time_s": 150.0,
-    "equilibrium_skip_steps": 1000000,
+    "equilibrium_skip_steps": 10,
     "source_skip_steps": 1,
     "transport_skip_steps": 10,
     "pedestal_skip_steps": 10,
-    "equilibrium_model": "geqdsk_prescribed",
-    "geqdsk_path": "ITERbaseline.eqdsk",
+    "equilibrium_model": "reduced_fixed_boundary",
     "current_evolution_model": "psi_diffusion",
     "density_evolution_model": "greenwald_feedback",
     "transport_model": "tglfnn_jax",
@@ -38,7 +37,8 @@
     "pedestal_enforcement": "tanh_underlay",
     "pedestal_lh_threshold_model": "delabie",
     "initial_beta_N_target": 0.5,
-    "initial_profile_model": "parabolic"
+    "initial_profile_model": "parabolic",
+    "initial_current_profile_model": "total_current_shape"
   },
   "waveform": {
     "name": "iter_like_from_input_file",

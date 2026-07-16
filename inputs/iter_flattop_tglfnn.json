@@ -6,7 +6,7 @@
     "Bt": 5.3,
     "Ip_MA": 15.0,
     "kappa": 1.8,
-    "delta": 0.33,
+    "delta": 0.4,
     "Zeff": 1.8,
     "plasma_species": "DT",
     "impurity_Z": 74.0

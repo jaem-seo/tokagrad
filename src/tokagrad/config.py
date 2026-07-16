@@ -18,7 +18,7 @@ class MachineConfig:
     # Minor radius [m].
     kappa: float = 1.8
     # Edge elongation used by the fast fixed-boundary geometry.
-    delta: float = 0.33
+    delta: float = 0.4
     # Edge triangularity used by the fast fixed-boundary geometry.
     Bt: float = 5.3
     # Vacuum toroidal field on axis [T].
