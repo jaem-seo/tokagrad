@@ -14,10 +14,10 @@
   "actuator": {
     "P_aux_MW": 50.0,
     "heat_center": 0.2,
-    "heat_width": 0.3,
+    "heat_width": 0.25,
     "cd_efficiency_20": 0.3,
     "greenwald_fraction_target": 0.9,
-    "greenwald_edge_density_fraction": 0.2
+    "greenwald_edge_density_fraction": 0.1
   },
   "simulation": {
     "nr": 32,

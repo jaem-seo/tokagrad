@@ -5,16 +5,18 @@
     "a": 2.0,
     "Bt": 5.3,
     "Ip_MA": 15.0,
-    "kappa": 1.8,
-    "delta": 0.33,
+    "kappa": 1.7,
+    "delta": 0.5,
     "Zeff": 1.8,
     "plasma_species": "DT",
     "impurity_Z": 74.0
   },
   "actuator": {
     "P_aux_MW": 50.0,
-    "greenwald_fraction_target": 1.0,
-    "greenwald_edge_density_fraction": 0.15
+    "heat_center": 0.2,
+    "heat_width": 0.25,
+    "greenwald_fraction_target": 0.9,
+    "greenwald_edge_density_fraction": 0.1
   },
   "simulation": {
     "nr": 32,

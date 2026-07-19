@@ -12,22 +12,21 @@
   },
   "actuator": {
     "P_aux_MW": 50.0,
-    "greenwald_fraction_target": 0.85,
-    "greenwald_edge_density_fraction": 0.15
+    "greenwald_fraction_target": 0.9,
+    "greenwald_edge_density_fraction": 0.1
   },
   "simulation": {
     "simulation_model": "0d_fast",
     "nr": 32,
     "ntheta": 32,
     "dt": 0.5,
-    "end_time_s": 50,
+    "end_time_s": 10,
     "initial_beta_N_target": 1.8,
-    "density_evolution_model": "greenwald_rescale_tanh",
-    "zero_d_H_factor": 0.9,
+    "density_evolution_model": "greenwald_rescale_initial_shape",
+    "zero_d_H_factor": 0.8,
     "zero_d_dt_fraction_tauE": 0.1,
-    "pedestal_model": "eped1_nn_jax",
-    "equilibrium_model": "geqdsk_prescribed",
-    "geqdsk_path": "ITERbaseline.eqdsk",
+    "pedestal_model": "alpha_critical",
+    "equilibrium_model": "reduced_fixed_boundary",
     "current_evolution_model": "saturated_conductivity"
   },
   "optimization": {

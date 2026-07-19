@@ -14,10 +14,10 @@
   "actuator": {
     "P_aux_MW": 50.0,
     "heat_center": 0.2,
-    "heat_width": 0.3,
+    "heat_width": 0.25,
     "cd_efficiency_20": 0.3,
     "greenwald_fraction_target": 0.9,
-    "greenwald_edge_density_fraction": 0.2
+    "greenwald_edge_density_fraction": 0.1
   },
   "simulation": {
     "nr": 32,
@@ -34,11 +34,11 @@
     "density_evolution_model": "greenwald_feedback",
     "density_boundary_source_width": 0.05,
     "transport_model": "bohm_gyrobohm",
-    "bohm_chi_e_bohm_coeff": 1.0e-4,
-    "bohm_chi_i_bohm_coeff": 1.0e-4,
-    "bohm_chi_e_gyrobohm_coeff": 1.0e-5,
-    "bohm_chi_i_gyrobohm_coeff": 1.0e-5,
-    "neoclassical_transport_model": "chang_hinton",
+    "bohm_chi_e_bohm_coeff": 8.0e-5,
+    "bohm_chi_i_bohm_coeff": 8.0e-5,
+    "bohm_chi_e_gyrobohm_coeff": 1.5e-5,
+    "bohm_chi_i_gyrobohm_coeff": 1.5e-5,
+    "neoclassical_transport_model": "angioni",
     "pedestal_model": "alpha_critical",
     "pedestal_enforcement": "tanh_underlay",
     "pedestal_lh_threshold_model": "delabie",

@@ -130,6 +130,20 @@ def _interp_at_rho(rho, y, rho_query):
     return jnp.sum(w * y) / (jnp.sum(w) + 1e-12)
 
 
+def pedestal_top_density20_from_profile(rho, state, machine, actuator, sim, width):
+    """AD-friendly density at the current pedestal top, in 1e20 m^-3.
+
+    EPED-style pedestal targets need n_e,ped.  Instead of using the nominal
+    config height, read it from the evolving density profile at rho_top=1-width.
+    The interpolation is smooth in both the profile values and rho_top.
+    """
+    rho_top = 1.0 - width
+    ne_profile = _maybe_lower(jnp.asarray(state.ne20), 1.0e-5, sim, 1.0e-5)
+    ne_top = _interp_at_rho(rho, ne_profile, rho_top)
+    edge_floor = _maybe_lower(target_edge_ne20(machine, actuator, sim), 1.0e-5, sim, 1.0e-5)
+    return _maybe_lower(ne_top, edge_floor, sim, 1.0e-4)
+
+
 def pedestal_pressure_height_from_alpha(rho, machine, q, sim, beta_p_guess=0.05):
     """Compute pedestal pressure height from alpha_crit times KBM width.
 
@@ -180,18 +194,17 @@ def pedestal_pressure_height_from_alpha(rho, machine, q, sim, beta_p_guess=0.05)
 
 
 def _tanh_pedestal_profile(rho, edge_value, height, width, sharpness):
-    #rho_top = 1.0 - width
-    #s = 0.5 * (1.0 - jnp.tanh((rho - rho_top) / (0.5 * width + 1e-8)))
     rho_ped = 1.0 - 0.5 * width # center of the pedestal
     s = 0.5 * (1.0 - jnp.tanh((rho - rho_ped) / (0.5 * width + 1e-8)))
     return edge_value + height * s
 
-def _targets_from_pressure_height(rho, machine, actuator, sim, dp_ped, width):
-    ne_height = sim.pedestal_density_height20
+def _targets_from_pressure_height(rho, state, machine, actuator, sim, dp_ped, width):
+    ne_edge20 = target_edge_ne20(machine, actuator, sim)
+    ne_top20 = pedestal_top_density20_from_profile(rho, state, machine, actuator, sim, width)
+    ne_height = _maybe_lower(ne_top20 - ne_edge20, 0.0, sim, 1.0e-4)
     ne_target = _tanh_pedestal_profile(
-        rho, target_edge_ne20(machine, actuator, sim), ne_height, width, sim.pedestal_transition_sharpness
+        rho, ne_edge20, ne_height, width, sim.pedestal_transition_sharpness
     )
-    ne_top20 = target_edge_ne20(machine, actuator, sim) + ne_height
     p_e = sim.pedestal_te_fraction * dp_ped
     p_i = (1.0 - sim.pedestal_te_fraction) * dp_ped
     Te_height = p_e / (_smooth_lower(ne_top20, 0.02, 1e-4) * 1.0e20 * KEV_TO_J)
@@ -210,7 +223,7 @@ def alpha_critical_pedestal_targets(rho, state, machine, actuator, sim, q):
 
     # First build the discrete target from the analytic pressure-height estimate.
     Te0, Ti0, ne0 = _targets_from_pressure_height(
-        rho, machine, actuator, sim, info["dp_ped"], info["width"]
+        rho, state, machine, actuator, sim, info["dp_ped"], info["width"]
     )
 
     # Calibrate the discrete target so its finite-difference alpha actually
@@ -270,10 +283,15 @@ def alpha_critical_pedestal_targets(rho, state, machine, actuator, sim, q):
 
     dp_eff = info["dp_ped"] * discrete_scale * feedback_scale
     Te_tgt, Ti_tgt, ne_tgt = _targets_from_pressure_height(
-        rho, machine, actuator, sim, dp_eff, info["width"]
+        rho, state, machine, actuator, sim, dp_eff, info["width"]
     )
 
     info = dict(info)
+    ne_top20 = pedestal_top_density20_from_profile(rho, state, machine, actuator, sim, info["width"])
+    info["ped_ne_top_1e20"] = ne_top20
+    info["ped_ne_height_1e20"] = _maybe_lower(
+        ne_top20 - target_edge_ne20(machine, actuator, sim), 0.0, sim, 1.0e-4
+    )
     info["dp_ped_eff"] = dp_eff
     info["alpha_target_discrete"] = alpha_tgt
     info["alpha_discrete_scale"] = discrete_scale
@@ -297,7 +315,13 @@ def eped1_nn_jax_pedestal_targets(rho, state, machine, actuator, sim, q, beta_N_
         from .eped1nn_adapter import build_eped1nn_input
         from .eped1nn_jax import predict_eped1nn_jax
         max_nets = int(getattr(sim, "eped1nn_jax_max_nets", 0))
-        x = build_eped1nn_input(machine, actuator, sim, beta_N_proxy=beta_N_input)
+        info_guess = pedestal_pressure_height_from_alpha(rho, machine, q, sim)
+        neped_input20 = pedestal_top_density20_from_profile(
+            rho, state, machine, actuator, sim, info_guess["width"]
+        )
+        x = build_eped1nn_input(
+            machine, actuator, sim, beta_N_proxy=beta_N_input, neped20=neped_input20
+        )
         y = predict_eped1nn_jax(
             x,
             getattr(sim, "eped1nn_model_dir", "external_models/neural"),
@@ -327,8 +351,9 @@ def eped1_nn_jax_pedestal_targets(rho, state, machine, actuator, sim, q, beta_N_
     )
     ptotped_Pa = _maybe_lower(p_ped_MPa, 0.0, sim, 1e-3) * 1.0e6 * sim.eped1nn_output_scale
 
-    ne_height = sim.pedestal_density_height20
-    neped20 = _maybe_lower(target_edge_ne20(machine, actuator, sim) + ne_height, 0.05, sim, 1e-3)
+    ne_edge20 = target_edge_ne20(machine, actuator, sim)
+    neped20 = pedestal_top_density20_from_profile(rho, state, machine, actuator, sim, width)
+    ne_height = _maybe_lower(neped20 - ne_edge20, 0.0, sim, 1.0e-4)
     Tsum_keV = ptotped_Pa / _smooth_lower(neped20 * 1.0e20 * KEV_TO_J, 1.0e-30, 1.0e-30)
     f_e = _maybe_bound(sim.pedestal_te_fraction, 1.0e-6, 1.0 - 1.0e-6, sim, 1.0e-6)
     Te_ped_keV = f_e * Tsum_keV
@@ -343,7 +368,7 @@ def eped1_nn_jax_pedestal_targets(rho, state, machine, actuator, sim, q, beta_N_
         rho, actuator.edge_Ti_keV, Ti_height, width, sim.pedestal_transition_sharpness
     )
     ne_tgt = _tanh_pedestal_profile(
-        rho, target_edge_ne20(machine, actuator, sim), ne_height, width, sim.pedestal_transition_sharpness
+        rho, ne_edge20, ne_height, width, sim.pedestal_transition_sharpness
     )
 
     info = {
@@ -362,6 +387,9 @@ def eped1_nn_jax_pedestal_targets(rho, state, machine, actuator, sim, q, beta_N_
         "eped1nn_width_raw": jnp.asarray(width_raw),
         "eped1nn_Te_ped_keV": jnp.asarray(Te_ped_keV),
         "eped1nn_Ti_ped_keV": jnp.asarray(Ti_ped_keV),
+        "eped1nn_neped_input_1e20": jnp.asarray(neped_input20),
+        "ped_ne_top_1e20": jnp.asarray(neped20),
+        "ped_ne_height_1e20": jnp.asarray(ne_height),
     }
     return Te_tgt, Ti_tgt, ne_tgt, info
 
@@ -850,9 +878,12 @@ def pedestal_diagnostics(rho, state, machine, actuator, sim, q=None, beta_N_prox
         "ped_beta_p": info["beta_p_ped"],
         "ped_dp_Pa": info["dp_ped"],
         "ped_dp_eff_Pa": info.get("dp_ped_eff", info["dp_ped"]),
+        "ped_ne_top_1e20": info.get("ped_ne_top_1e20", jnp.asarray(0.0)),
+        "ped_ne_height_1e20": info.get("ped_ne_height_1e20", jnp.asarray(0.0)),
         "ped_q_top": info["q_top"],
         "ped_s_top": info["s_top"],
         "ped_model_used": info.get("model_used", jnp.asarray(0.0)),
+        "eped1nn_neped_input_1e20": info.get("eped1nn_neped_input_1e20", jnp.asarray(0.0)),
         "eped1nn_teped_eV": info.get("eped1nn_teped_eV", jnp.asarray(0.0)),
         "eped1nn_p_ped_MPa": info.get("eped1nn_p_ped_MPa", jnp.asarray(0.0)),
         "eped1nn_ptotped_kPa": info.get("eped1nn_ptotped_kPa", jnp.asarray(0.0)),

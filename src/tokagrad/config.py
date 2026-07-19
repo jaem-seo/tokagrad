@@ -16,9 +16,9 @@ class MachineConfig:
     # Major radius [m].
     a: float = 2.0
     # Minor radius [m].
-    kappa: float = 1.8
+    kappa: float = 1.7
     # Edge elongation used by the fast fixed-boundary geometry.
-    delta: float = 0.4
+    delta: float = 0.5
     # Edge triangularity used by the fast fixed-boundary geometry.
     Bt: float = 5.3
     # Vacuum toroidal field on axis [T].
@@ -56,11 +56,11 @@ class ActuatorConfig:
     # Fast auxiliary ion charge number.
     heat_center: float = 0.2
     # Center of the Gaussian auxiliary-heating profile in rho.
-    heat_width: float = 0.3
+    heat_width: float = 0.25
     # Width of the Gaussian auxiliary-heating profile in rho.
     greenwald_fraction_target: float = 0.9
     # Target Greenwald fraction f_G = <n_e>/n_G.
-    greenwald_edge_density_fraction: float = 0.15
+    greenwald_edge_density_fraction: float = 0.1
     # Edge density as a fraction of target volume-averaged Greenwald density.
     edge_Te_keV: float = 0.25
     # Fixed electron temperature boundary value at the edge [keV].
@@ -348,7 +348,7 @@ class SimulationConfig:
     # "auto" uses cardinal uniform points for fixed-boundary Miller geometry and
     # a uniformly spaced grid shifted to include the lower X-point/min-Z boundary
     # point for prescribed GEQDSK geometry, preserving uniform theta spacing.
-    shafranov_shift_max: float = 0.2
+    shafranov_shift_max: float = 0.25
     # Maximum allowed analytic Shafranov shift Delta0/a.
     triangularity_profile_power: float = 1.0
     # Power-law exponent for triangularity ramp from axis to edge.
@@ -436,12 +436,14 @@ class SimulationConfig:
     # Multiplicative factor for alpha-critical pedestal model.
     pedestal_alpha_min: float = 1.0
     # Lower bound for alpha_critical.
-    pedestal_alpha_max: float = 5.0
+    pedestal_alpha_max: float = 5.5
     # Upper bound for alpha_critical.
     pedestal_pressure_relax_tau: float = 0.005
     # Relaxation time toward pedestal pressure/temperature targets [s].
     pedestal_density_height20: float = 0.25
-    # Nominal density pedestal height [1e20 m^-3].
+    # Deprecated legacy nominal density pedestal height [1e20 m^-3].
+    # Runtime pedestal closures now infer n_e,ped from the evolving density
+    # profile at the pedestal top; this field is retained for old input files.
     pedestal_te_fraction: float = 0.5
     # Fraction of pedestal pressure assigned to electron temperature channel.
     pedestal_transition_sharpness: float = 0.012

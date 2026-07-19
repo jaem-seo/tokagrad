@@ -19,13 +19,14 @@ EPED1NN_INPUT_NAMES = [
 
 
 def build_eped1nn_input(machine, actuator, sim, beta_N_proxy=1.5, neped20=None):
-    """Build the GA EPED1-NN 10-input vector."""
+    """Build the GA EPED1-NN 10-input vector.
+
+    Runtime pedestal calls should pass ``neped20`` from the current density
+    profile at the pedestal top.  The fallback here is only for standalone
+    validation scripts that do not have a profile state available.
+    """
     if neped20 is None:
-        neped20 = jnp.maximum(
-            target_edge_ne20(machine, actuator, sim)
-            + getattr(sim, "pedestal_density_height20", 0.25),
-            0.05,
-        )
+        neped20 = jnp.maximum(target_edge_ne20(machine, actuator, sim), 0.05)
     return jnp.array([
         machine.a,
         beta_N_proxy,
