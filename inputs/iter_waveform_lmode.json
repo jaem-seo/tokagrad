@@ -81,7 +81,7 @@
   "optimization": {
     "n_iter": 5,
     "gradient_mode": "autodiff",
-    "ad_smooth_mode": false,
+    "ad_smooth_mode": true,
     "learning_rate": 1.0,
     "objective": [
       "Qfinal",
