@@ -186,7 +186,7 @@ def ohmic_heating(rho, state, machine, actuator, sim, eq=None):
     """
     if not sim.include_ohmic_heating:
         return jnp.zeros_like(rho)
-    j_ind, _, _, _ = current_components_from_state(rho, state, machine, actuator, sim, eq=eq)
+    j_ind, _, _, j_tot = current_components_from_state(rho, state, machine, actuator, sim, eq=eq)
     if eq is not None and hasattr(eq, "q"):
         q = jnp.clip(eq.q, 0.5, 10.0)
     else:
@@ -198,7 +198,7 @@ def ohmic_heating(rho, state, machine, actuator, sim, eq=None):
         eta = neoclassical_resistivity(state.Te, rho, machine, eq=eq, q=q)
     else:
         eta = sauter_neoclassical_resistivity_1999(state.Te, state.Ti, state.ne20, q, rho, machine)
-    return _maybe_bound(getattr(sim, "resistivity_multiplier", 1.0) * eta * j_ind**2 / 1.0e6, 0.0, 50.0, sim, 1e-2)
+    return _maybe_bound(getattr(sim, "resistivity_multiplier", 1.0) * eta * j_ind * j_tot / 1.0e6, 0.0, 50.0, sim, 1e-2)
 
 
 def electron_ion_exchange_rate_s(Te_keV, Ti_keV, ne20, machine, sim=None):

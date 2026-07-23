@@ -154,6 +154,40 @@ def _active_configs(machine, actuator, sim, waveform, t):
     return apply_waveform_controls(machine, actuator, waveform, float(t))
 
 
+def _output_stem(input_file: Path | None) -> str:
+    if input_file is None:
+        return "tokagrad"
+    stem = Path(input_file).stem.strip()
+    return stem or "tokagrad"
+
+
+def _time_filename_tag(t_s: float) -> str:
+    tag = f"{float(t_s):.6f}".rstrip("0").rstrip(".")
+    if not tag:
+        tag = "0"
+    return tag.replace("-", "m").replace(".", "p")
+
+
+def _default_figure_path(input_file: Path | None) -> Path:
+    return (Path.cwd() / "outputs" / f"{_output_stem(input_file)}.png").resolve()
+
+
+def _default_result_path(input_file: Path | None, time_s: float) -> Path:
+    return (
+        Path.cwd()
+        / "outputs"
+        / f"{_output_stem(input_file)}_t{_time_filename_tag(time_s)}s.npz"
+    ).resolve()
+
+
+def _resolve_output_path(path_like) -> Path:
+    out = Path(str(path_like)).expanduser()
+    if not out.is_absolute():
+        out = (Path.cwd() / out).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
 def _aug_profile(rho, y, edge_value=None):
     rr, yy = boundary_augmented_profile(rho, y, edge_value=edge_value)
     return np.asarray(rr), np.asarray(yy)
@@ -345,7 +379,7 @@ def _plot_state_summary(axs, rho, diag, state, machine, actuator, sim, t, wavefo
     ax.text(0.02, 0.98, "\n".join([x for x in lines if x != ""]), va="top", ha="left", family="monospace", fontsize=9)
 
 
-def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, final_state, hist, *, show=True, save_path=""):
+def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, final_state, hist, *, show=True, save_path="", input_file=None):
     """Unified plotting helper with the time slider initially at the final time."""
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider, Button
@@ -358,7 +392,8 @@ def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, f
     fig, axs = plt.subplots(1, ncols, figsize=(21 + 4 * (ncols - 5), 5))
     fig.subplots_adjust(bottom=0.2, wspace=0.32, hspace=0.36, left=0.035, right=0.985)
     # Leave room for one-step navigation buttons next to the time slider.
-    slider_ax = fig.add_axes([0.12, 0.05, 0.66, 0.035])
+    slider_ax = fig.add_axes([0.08, 0.05, 0.58, 0.035])
+    save_ax = fig.add_axes([0.717, 0.05, 0.13, 0.035])
     back_ax = fig.add_axes([0.855, 0.05, 0.045, 0.035])
     fwd_ax = fig.add_axes([0.908, 0.05, 0.045, 0.035])
     slider = Slider(
@@ -407,19 +442,39 @@ def plot_simulation_time_slider(machine, actuator, sim, waveform, rho, state0, f
 
     back_button = Button(back_ax, "-1")
     fwd_button = Button(fwd_ax, "+1")
+    save_button = Button(save_ax, "Save current results")
     back_button.on_clicked(lambda _event: _set_frame_index(current_index["idx"] - 1))
     fwd_button.on_clicked(lambda _event: _set_frame_index(current_index["idx"] + 1))
+
+    def _save_current(_event):
+        idx = int(current_index["idx"])
+        tnow = float(times[idx]) if nframes else 0.0
+        try:
+            _save_time_slice_results(
+                rho, state0, final_state, hist, machine, actuator, sim,
+                waveform=waveform,
+                input_file=input_file,
+                requested_times=(tnow,),
+                force=True,
+            )
+        except Exception as exc:
+            print(f"Failed to save current results at t={tnow:.6g} s: {type(exc).__name__}: {exc}", flush=True)
+
+    save_button.on_clicked(_save_current)
+    fig._tokagrad_widgets = (slider, back_button, fwd_button, save_button)
 
     slider.on_changed(update)
     update(float(times[-1]) if nframes else 0.0)
     if save_path:
-        fig.savefig(save_path, dpi=160, bbox_inches="tight")
+        out_fig = _resolve_output_path(save_path)
+        fig.savefig(out_fig, dpi=160, bbox_inches="tight")
+        print(f"Saved figure to {out_fig}")
     if show:
         try:
             plt.show()
         except Exception as exc:
             print(
-                "Matplotlib show() failed for the static final plot "
+                "Matplotlib show() failed for the interactive plot "
                 f"({type(exc).__name__}: {exc}). "
                 "Use --no-show --save-figure <path> on headless/X11-limited systems.",
                 flush=True,
@@ -463,9 +518,19 @@ def plot_final_state_static(machine, actuator, sim, waveform, rho, state0, final
     )
 
     if save_path:
-        fig.savefig(save_path, dpi=160, bbox_inches="tight")
+        out_fig = _resolve_output_path(save_path)
+        fig.savefig(out_fig, dpi=160, bbox_inches="tight")
+        print(f"Saved figure to {out_fig}")
     if show:
-        plt.show()
+        try:
+            plt.show()
+        except Exception as exc:
+            print(
+                "Matplotlib show() failed for the static final plot "
+                f"({type(exc).__name__}: {exc}). The figure was still saved.",
+                flush=True,
+            )
+            plt.close(fig)
     else:
         plt.close(fig)
     return fig
@@ -543,7 +608,21 @@ def _final_profiles_at_state(rho, state, machine, actuator, sim, *, include_diff
 
 
 
-def _save_time_slice_results(rho, state0, final_state, hist, machine, actuator, sim, *, waveform=None, input_file=None):
+def _save_time_slice_results(
+    rho,
+    state0,
+    final_state,
+    hist,
+    machine,
+    actuator,
+    sim,
+    *,
+    waveform=None,
+    input_file=None,
+    requested_times=None,
+    save_result_file=None,
+    force=False,
+):
     """Save requested time slices to a compressed NumPy archive.
 
     The archive stores one row per requested saved time.  Requested times are
@@ -551,7 +630,7 @@ def _save_time_slice_results(rho, state0, final_state, hist, machine, actuator, 
     arrays of shape (n_saved, nr); diagnostics are stored as scalar time series.
     A small JSON sidecar is written next to the NPZ for discoverability.
     """
-    if not bool(getattr(sim, "save_results_enabled", False)):
+    if (not force) and (not bool(getattr(sim, "save_results_enabled", False))):
         return None
     fmt = str(getattr(sim, "save_result_format", "npz")).lower()
     if fmt not in ("npz", "numpy", "numpy_npz"):
@@ -561,7 +640,10 @@ def _save_time_slice_results(rho, state0, final_state, hist, machine, actuator, 
     if times.size == 0:
         times = np.asarray([0.0, float(sim.dt) * int(sim.n_steps)], dtype=float)
 
-    requested = np.asarray(tuple(getattr(sim, "save_result_times_s", ()) or ()), dtype=float)
+    if requested_times is None:
+        requested = np.asarray(tuple(getattr(sim, "save_result_times_s", ()) or ()), dtype=float)
+    else:
+        requested = np.asarray(tuple(requested_times), dtype=float)
     if requested.size == 0:
         requested = np.asarray([float(times[-1])], dtype=float)
     requested = np.clip(requested, float(times[0]), float(times[-1]))
@@ -653,15 +735,14 @@ def _save_time_slice_results(rho, state0, final_state, hist, machine, actuator, 
     for key, rows in control_series.items():
         data[f"control_{key}"] = np.asarray(rows, dtype=float)
 
-    out = Path(str(getattr(sim, "save_result_file", "outputs/tokagrad_results.npz"))).expanduser()
-    if not out.is_absolute():
-        out = (Path.cwd() / out).resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, **data)
+    default_cfg_file = SimulationConfig().save_result_file
+    explicit_out = str(save_result_file or "").strip()
+    cfg_out = str(getattr(sim, "save_result_file", "") or "").strip()
+    if (not explicit_out) and bool(getattr(sim, "save_results_enabled", False)) and cfg_out and cfg_out != default_cfg_file:
+        explicit_out = cfg_out
 
-    meta = {
+    meta_base = {
         "format": "tokagrad_time_slices_npz_v1",
-        "file": str(out),
         "input_file": str(input_file) if input_file is not None else "",
         "requested_times_s": requested.tolist(),
         "saved_times_s": saved_times.tolist(),
@@ -688,14 +769,47 @@ def _save_time_slice_results(rho, state0, final_state, hist, machine, actuator, 
         "actuator_initial": asdict(actuator),
         "simulation": asdict(sim),
     }
-    if bool(getattr(sim, "save_result_include_metadata_json", True)):
-        meta_path = out.with_suffix(out.suffix + ".json")
-        meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
-        print(f"Saved time-slice results to {out}")
-        print(f"Saved result metadata to {meta_path}")
-    else:
-        print(f"Saved time-slice results to {out}")
-    return out
+
+    def _write_npz(out: Path, payload: dict[str, np.ndarray], meta: dict):
+        out = _resolve_output_path(out)
+        np.savez_compressed(out, **payload)
+        meta = dict(meta)
+        meta["file"] = str(out)
+        if bool(getattr(sim, "save_result_include_metadata_json", True)):
+            meta_path = out.with_suffix(out.suffix + ".json")
+            meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
+            print(f"Saved time-slice results to {out}")
+            print(f"Saved result metadata to {meta_path}")
+        else:
+            print(f"Saved time-slice results to {out}")
+        return out
+
+    if explicit_out:
+        return _write_npz(_resolve_output_path(explicit_out), data, meta_base)
+
+    n_saved = int(len(indices))
+    saved_paths = []
+    for row in range(n_saved):
+        row_data: dict[str, np.ndarray] = {}
+        for key, value in data.items():
+            arr = np.asarray(value)
+            if key == "rho":
+                row_data[key] = arr
+            elif arr.ndim >= 1 and arr.shape[0] == n_saved:
+                row_data[key] = arr[row:row + 1]
+            else:
+                row_data[key] = arr
+        meta = dict(meta_base)
+        meta.update({
+            "requested_times_s": [float(requested[row])],
+            "saved_times_s": [float(saved_times[row])],
+            "frame_indices": [int(indices[row])],
+            "n_saved": 1,
+        })
+        saved_paths.append(_write_npz(_default_result_path(input_file, float(saved_times[row])), row_data, meta))
+    if not saved_paths:
+        return None
+    return saved_paths[0] if len(saved_paths) == 1 else saved_paths
 
 
 def _plot_surfaces_with_geqdsk(ax, eq, sim):
@@ -740,7 +854,7 @@ def _waveform_series(machine, actuator, sim, waveform, t_grid):
 
 
 def plot_waveform_single_figure_time_slider(rho, state0, final_state, machine, actuator, sim, waveform, wf_hist,
-                                            *, show=True, save_path=""):
+                                            *, show=True, save_path="", input_file=None):
     """One interactive figure: waveform row plus scalar-demo-style profile panels."""
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider, Button
@@ -787,7 +901,8 @@ def plot_waveform_single_figure_time_slider(rho, state0, final_state, machine, a
     ax_text = fig.add_subplot(gs[1, next_col + 1])
 
     tmax = float(times[-1]) if nframes > 1 else 0.0
-    slider_ax = fig.add_axes([0.12, 0.055, 0.66, 0.035])
+    slider_ax = fig.add_axes([0.08, 0.055, 0.58, 0.035])
+    save_ax = fig.add_axes([0.717, 0.055, 0.13, 0.035])
     back_ax = fig.add_axes([0.855, 0.055, 0.045, 0.035])
     fwd_ax = fig.add_axes([0.908, 0.055, 0.045, 0.035])
     slider = Slider(
@@ -986,16 +1101,43 @@ def plot_waveform_single_figure_time_slider(rho, state0, final_state, machine, a
 
     back_button = Button(back_ax, "-1")
     fwd_button = Button(fwd_ax, "+1")
+    save_button = Button(save_ax, "Save current results")
     back_button.on_clicked(lambda _event: _set_frame_index(current_index["idx"] - 1))
     fwd_button.on_clicked(lambda _event: _set_frame_index(current_index["idx"] + 1))
+
+    def _save_current(_event):
+        idx = int(current_index["idx"])
+        tnow = float(times[idx]) if nframes else 0.0
+        try:
+            _save_time_slice_results(
+                rho, state0, final_state, wf_hist, machine, actuator, sim,
+                waveform=waveform,
+                input_file=input_file,
+                requested_times=(tnow,),
+                force=True,
+            )
+        except Exception as exc:
+            print(f"Failed to save current results at t={tnow:.6g} s: {type(exc).__name__}: {exc}", flush=True)
+
+    save_button.on_clicked(_save_current)
+    fig._tokagrad_widgets = (slider, back_button, fwd_button, save_button)
 
     slider.on_changed(draw)
     draw(tmax)
     if save_path:
-        fig.savefig(save_path, dpi=180, bbox_inches="tight")
-        print(f"Saved figure to {save_path}")
+        out_fig = _resolve_output_path(save_path)
+        fig.savefig(out_fig, dpi=180, bbox_inches="tight")
+        print(f"Saved figure to {out_fig}")
     if show:
-        plt.show()
+        try:
+            plt.show()
+        except Exception as exc:
+            print(
+                "Matplotlib show() failed for the interactive waveform plot "
+                f"({type(exc).__name__}: {exc}). The figure was still saved.",
+                flush=True,
+            )
+            plt.close(fig)
     else:
         plt.close(fig)
     return fig
@@ -1060,8 +1202,8 @@ def _run_waveform(machine, actuator, sim, waveform):
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Run a TokaGrad simulation selected by an input JSON file.")
-    p.add_argument("--input-file", default="", help="Input JSON. If omitted, inputs/waveform_iter_like.json is used when available.")
-    p.add_argument("--save-figure", default="", help="Optional output PNG/PDF path.")
+    p.add_argument("--input-file", default="", help="Input JSON. If omitted, inputs/iter_flattop_tglfnn.json is used when available.")
+    p.add_argument("--save-figure", default="", help="Output PNG/PDF path. Default: outputs/<input_file_stem>.png.")
     p.add_argument("--no-show", action="store_true", help="Do not call plt.show().")
     p.add_argument("--no-plot", action="store_true", help="Run simulation and diagnostics only; skip plotting.")
     p.add_argument("--simple-final-plot", action="store_true", help="Plot only the final state without Matplotlib sliders/buttons. Useful on X11 servers without XInput 2.")
@@ -1084,9 +1226,9 @@ def parse_args(argv=None):
     p.add_argument("--transport-skip", type=int, default=None, help="Recompute transport coefficients every N transport steps; default 1.")
     p.add_argument("--pedestal-skip", type=int, default=None, help="Recompute L-H gate/pedestal terms every N transport steps; default 1.")
     p.add_argument("--zero-d-python-loop", action="store_true", help="0.5D debugging mode: use Python loop instead of lax.scan.")
-    p.add_argument("--save-results", action="store_true", help="Save selected time slices to an NPZ file after the run.")
+    p.add_argument("--save-results", action="store_true", help="Save selected time slices to NPZ after the run. Final time is saved by default.")
     p.add_argument("--save-result-times", default="", help="Comma-separated physical times [s] to save, e.g. '0,1,2.5'.")
-    p.add_argument("--save-result-file", default="", help="Output .npz file for saved time slices.")
+    p.add_argument("--save-result-file", default="", help="Explicit output .npz archive for saved time slices. Default: outputs/<input_file_stem>_t<time>s.npz.")
     return p.parse_args(argv)
 
 
@@ -1194,14 +1336,15 @@ def main(argv=None):
     _block_until_ready((diag0, diagf))
     timer.mark("diagnostics")
 
-    if bool(getattr(sim, "save_results_enabled", False)):
-        rho_save, _, _ = make_grid_from_config(sim.nr, machine.a, sim)
-        _save_time_slice_results(
-            np.asarray(rho_save), state0, final_state, hist, machine, actuator, sim,
-            waveform=waveform if has_waveform else None,
-            input_file=input_file,
-        )
-        timer.mark("result saving")
+    rho_save, _, _ = make_grid_from_config(sim.nr, machine.a, sim)
+    _save_time_slice_results(
+        np.asarray(rho_save), state0, final_state, hist, machine, actuator, sim,
+        waveform=waveform if has_waveform else None,
+        input_file=input_file,
+        save_result_file=args.save_result_file or None,
+        force=True,
+    )
+    timer.mark("result saving")
 
     print("\nInitial diagnostics:")
     for k in ("Te0_keV", "Ti0_keV", "ne_avg_1e20", "greenwald_fraction", "greenwald_fraction_volume", "greenwald_fraction_line", "Q", "P_fus_MW", "beta_N"):
@@ -1224,22 +1367,46 @@ def main(argv=None):
     if not args.no_plot:
         rho, _, dr = make_grid_from_config(sim.nr, machine.a, sim)
         show = (not args.no_show) and _backend_can_show()
+        figure_path = args.save_figure or str(_default_figure_path(input_file))
         if args.simple_final_plot:
             plot_final_state_static(
                 machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
-                show=show, save_path=args.save_figure
+                show=show, save_path=figure_path
             )
         elif has_waveform:
-            plot_waveform_single_figure_time_slider(
-                rho, state0, final_state, machine, actuator, sim, waveform, hist,
-                show=show,
-                save_path=args.save_figure,
-            )
+            try:
+                plot_waveform_single_figure_time_slider(
+                    rho, state0, final_state, machine, actuator, sim, waveform, hist,
+                    show=show,
+                    save_path=figure_path,
+                    input_file=input_file,
+                )
+            except Exception as exc:
+                print(
+                    "Interactive waveform figure failed "
+                    f"({type(exc).__name__}: {exc}); saving a static final-state figure instead.",
+                    flush=True,
+                )
+                plot_final_state_static(
+                    machine, actuator, sim, waveform, rho, state0, final_state, hist,
+                    show=False, save_path=figure_path
+                )
         else:
-            plot_simulation_time_slider(
-                machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
-                show=show, save_path=args.save_figure
-            )
+            try:
+                plot_simulation_time_slider(
+                    machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
+                    show=show, save_path=figure_path, input_file=input_file
+                )
+            except Exception as exc:
+                print(
+                    "Interactive figure failed "
+                    f"({type(exc).__name__}: {exc}); saving a static final-state figure instead.",
+                    flush=True,
+                )
+                plot_final_state_static(
+                    machine, actuator, sim, waveform if has_waveform else None, rho, state0, final_state, hist,
+                    show=False, save_path=figure_path
+                )
 
 
 if __name__ == "__main__":
