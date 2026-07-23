@@ -379,9 +379,15 @@ class SimulationConfig:
     heat_convection_i_base: float = 0.0
     # Constant ion heat-convection coefficient used when heat_convection_model="constant".
     particle_convection_model: str = "none"
-    # Particle convection/pinch V_e model: "none" or "constant".
+    # Particle convection/pinch V_e model: "none", "constant", or "ware_pinch".
     particle_convection_base: float = 0.0
     # Constant particle-convection coefficient used when particle_convection_model="constant".
+    ware_pinch_scale: float = 1.0
+    # Multiplier for the reduced Ware pinch velocity V_W=-E_phi/B_theta.
+    ware_pinch_bpol_min_T: float = 0.02
+    # Minimum |B_theta| used to regularize the Ware-pinch velocity near the axis.
+    ware_pinch_velocity_max_m_s: float = 200.0
+    # Maximum absolute Ware-pinch convection velocity [m/s].
     equilibrium_model: str = "reduced_fixed_boundary"
     # Equilibrium source: "reduced_fixed_boundary" or "geqdsk_prescribed".
     geqdsk_path: str = ""

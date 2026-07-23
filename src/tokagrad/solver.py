@@ -19,7 +19,7 @@ from .grid import make_grid_from_config, infer_rho_faces, axis_augmented_profile
 from .profiles import PlasmaState, make_initial_profiles, pedestal_profile
 from .heating import total_heating_sources, volume_element_1d
 from .transport import compute_diffusivity, transport_fluxes
-from .current import psi_inductive_update, current_components_from_state, total_current, psi_from_current_density, ensure_psi_state_grid, saturated_conductivity_current_components, is_psi_diffusion_model, initial_current_shape, normalize_current_profile, poloidal_area_weights
+from .current import psi_inductive_update, current_components_from_state, total_current, psi_from_current_density, ensure_psi_state_grid, saturated_conductivity_current_components, is_psi_diffusion_model, initial_current_shape, normalize_current_profile, poloidal_area_weights, loop_voltage_from_ip_error
 from .equilibrium import solve_fixed_boundary_equilibrium
 from .pedestal import pedestal_sources, project_pedestal_alpha, martin_lh_threshold_power_MW, delabie_lh_threshold_power_MW, lh_transition_gate, pedestal_target_profiles, pedestal_cached_targets, pedestal_sources_from_cached_targets, project_pedestal_alpha_from_cached_targets
 from .waveforms import apply_waveform_controls
@@ -284,13 +284,41 @@ def heat_convection_profile(rho, sim, species):
     raise ValueError(f"Unknown heat_convection_model={model!r}.")
 
 
-def particle_convection_profile(rho, sim):
-    """Return particle pinch/convection coefficient V_e."""
+def particle_convection_profile(rho, sim, machine=None, actuator=None, state=None, eq=None):
+    """Return particle pinch/convection coefficient V_e [m/s].
+
+    Positive V_e is outward in the particle flux convention used by
+    ``semi_implicit_density_update``.  The Ware pinch option therefore returns a
+    negative velocity for a positive loop voltage:
+
+        V_Ware ~= -E_phi/B_theta,
+
+    with E_phi ~= V_loop/(2*pi*R0) and a large-aspect-ratio q-based
+    B_theta ~= |B_t| r/(R0 q).  This is a reduced transport option rather than a
+    full orbit/neo-classical Ware pinch calculation.
+    """
     model = getattr(sim, "particle_convection_model", "none")
     if model in ("none", None, ""):
         return jnp.zeros_like(rho)
     if model == "constant":
         return jnp.ones_like(rho) * getattr(sim, "particle_convection_base", 0.0)
+    if model == "ware_pinch":
+        if machine is None or actuator is None or state is None:
+            raise ValueError("particle_convection_model='ware_pinch' requires machine, actuator, and state.")
+        q = jnp.ones_like(rho) * 3.0
+        if eq is not None and hasattr(eq, "q"):
+            q = jnp.asarray(eq.q, dtype=rho.dtype)
+        q = jnp.clip(jnp.abs(q), 0.1, 50.0)
+        V_loop, _I_total = loop_voltage_from_ip_error(rho, state, machine, actuator, sim, eq=eq, q=q)
+        E_phi = V_loop / (2.0 * jnp.pi * jnp.maximum(jnp.abs(machine.R0), 1.0e-6))
+        r = jnp.maximum(machine.a * rho, machine.a * 1.0e-3)
+        Btheta = jnp.abs(machine.Bt) * r / (jnp.maximum(jnp.abs(machine.R0), 1.0e-6) * q + 1.0e-30)
+        Btheta = jnp.maximum(Btheta, getattr(sim, "ware_pinch_bpol_min_T", 0.02))
+        V_ware = -getattr(sim, "ware_pinch_scale", 1.0) * E_phi / Btheta
+        vmax = getattr(sim, "ware_pinch_velocity_max_m_s", 200.0)
+        if getattr(sim, "differentiable_smooth_mode", False):
+            return smooth_symmetric_limit(V_ware, vmax, getattr(sim, "smooth_rate_width", 1.0e-2))
+        return jnp.clip(V_ware, -vmax, vmax)
     raise ValueError(f"Unknown particle_convection_model={model!r}.")
 
 
@@ -1398,7 +1426,7 @@ def _implicit_profile_step_with_reference(
     if density_model_uses_direct_rescale(sim):
         ne_candidate = rescale_density_model_to_greenwald(rho, reference_state, machine, actuator, sim, eq, max_ne=5.0)
     else:
-        V_e = particle_convection_profile(rho, sim)
+        V_e = particle_convection_profile(rho, sim, machine=machine, actuator=actuator, state=reference_state, eq=eq)
         ne_candidate = semi_implicit_density_update(
             state.ne20, Dn, ne_source, rho, machine, sim,
             target_edge_ne20(machine, actuator, sim), sim.dt, eq, phi_rate,
@@ -1592,7 +1620,7 @@ def semi_implicit_step_cached(state: PlasmaState, cache: StepCache, i, machine, 
     if density_model_uses_direct_rescale(sim):
         ne_candidate = rescale_density_model_to_greenwald(rho, state, machine, actuator, sim, eq, max_ne=5.0)
     else:
-        V_e = particle_convection_profile(rho, sim)
+        V_e = particle_convection_profile(rho, sim, machine=machine, actuator=actuator, state=state, eq=eq)
         ne_candidate = semi_implicit_density_update(
             state.ne20, Dn, ne_source, rho, machine, sim,
             target_edge_ne20(machine, actuator, sim), sim.dt, eq, phi_rate,
